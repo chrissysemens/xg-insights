@@ -1,0 +1,5 @@
+echo "Running Prettier..."
+npm run format
+
+echo "Running tests..."
+npm run test:ci
