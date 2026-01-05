@@ -1,0 +1,32 @@
+# ------------------------
+# Python
+# ------------------------
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ------------------------
+# Node / Expo
+# ------------------------
+node_modules/
+.expo/
+dist/
+build/
+
+# ------------------------
+# Environment / secrets
+# ------------------------
+.env
+.env.*
+serviceAccount*.json
+google-services.json
+GoogleService-Info.plist
+
+# ------------------------
+# OS
+# ------------------------
+.DS_Store
+Thumbs.db

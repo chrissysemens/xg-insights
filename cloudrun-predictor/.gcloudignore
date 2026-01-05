@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
+
+# If present
+node_modules/
+dist/
+build/
+
+# Git
+.git/
+.gitignore
+
+# Logs
+*.log
+
+# Don't accidentally upload trainer or other repo parts if nested
+../trainer/
+../mobile/
+../functions/
