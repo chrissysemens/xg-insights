@@ -30,3 +30,7 @@ GoogleService-Info.plist
 # ------------------------
 .DS_Store
 Thumbs.db
+
+lib/
+lib/**
+/lib/**

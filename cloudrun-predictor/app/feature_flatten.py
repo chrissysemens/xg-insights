@@ -28,10 +28,26 @@ def to_float(v: Any) -> float:
             return float("nan")
     return float("nan")
 
-def build_matrix(items, feature_names):
-    X = np.zeros((len(items), len(feature_names)), dtype=np.float32)
+import numpy as np
+from typing import Any, Dict
+
+def to_float(v: Any) -> float:
+    if v is None:
+        return float("nan")
+    if isinstance(v, bool):
+        return 1.0 if v else 0.0
+    if isinstance(v, (int, float)):
+        return float(v)
+    if isinstance(v, str):
+        try:
+            return float(v)
+        except Exception:
+            return float("nan")
+    return float("nan")
+
+def build_matrix(items: list[Dict[str, Any]], feature_names: list[str]) -> np.ndarray:
+    X = np.empty((len(items), len(feature_names)), dtype=np.float32)
     for i, f in enumerate(items):
         for j, name in enumerate(feature_names):
-            v = f.get(name)
-            X[i, j] = 0.0 if v is None else float(v)
+            X[i, j] = to_float(f.get(name))
     return X

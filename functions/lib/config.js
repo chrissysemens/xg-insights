@@ -12,7 +12,7 @@ exports.ENV = {
     },
     PREDICTOR: {
         BASE_URL: process.env.PREDICTOR_BASE_URL,
-        MODEL_VERSION: process.env.MODEL_VERSION ?? "epl-v1",
+        MODEL_VERSION: process.env.MODEL_VERSION ?? "epl-v2",
     },
     APP: {
         REGION: "europe-west2",

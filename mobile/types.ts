@@ -1,12 +1,17 @@
 export type TeamDoc = {
-  id: number;
+  id: string;
   name: string;
   shortCode?: string | null;
   imagePath?: string | null;
 };
 
-export type MatchResult = { H: number; D: number; A: number; pick: "H" | "D" | "A" };
-export type YnPick = { Y: number; N: number; pick: "Y" | "N" };
+export type MatchResult = {
+  H: number;
+  D: number;
+  A: number;
+  pick: 'H' | 'D' | 'A';
+};
+export type YnPick = { Y: number; N: number; pick: 'Y' | 'N' };
 
 export type PredictionDoc = {
   fixtureId: string;
@@ -21,7 +26,7 @@ export type PredictionDoc = {
 };
 
 export type FixtureDoc = {
-  id: number;
+  id: string;
   startingAtTimestamp: number;
   startingAt: string;
   homeTeamId: number;
@@ -40,12 +45,12 @@ export type HighlightItem = {
   fixtureId: string;
   fixture: FixtureDoc;
   prediction: PredictionDoc;
+  homeTeam: TeamDoc | undefined;
+  awayTeam: TeamDoc | undefined;
 };
 
 export enum HighlightReason {
-  CLEAR_FAVOURITE = "CLEAR_FAVOURITE",
-  HIGH_GOALS = "HIGH_GOALS",
-  BTTS_LIKELY = "BTTS_LIKELY",
+  CLEAR_FAVOURITE = 'CLEAR_FAVOURITE',
+  HIGH_GOALS = 'HIGH_GOALS',
+  BTTS_LIKELY = 'BTTS_LIKELY',
 }
-
-

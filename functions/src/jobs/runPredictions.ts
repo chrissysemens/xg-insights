@@ -64,6 +64,8 @@ export async function runPredictionsWindow() {
   if (!ENV.PREDICTOR.BASE_URL) {
     throw new Error("Missing ENV.PREDICTOR.BASE_URL");
   }
+  const modelVersion = ENV.PREDICTOR.MODEL_VERSION;
+  const useV2 = modelVersion.includes("v2");
 
   const db = admin.firestore();
 
@@ -88,10 +90,10 @@ export async function runPredictionsWindow() {
   );
 
   const candidates = fixtures
-    .filter((f) => !!f.features)
+    .filter((f) => !!(useV2 ? f.featuresV2 : f.features))
     .map((f) => ({
       fixtureId: String(f.id ?? f.docId),
-      features: f.features,
+      features: useV2 ? f.featuresV2 : f.features,
     }));
 
   console.log(`Prediction candidates: ${candidates.length}`);

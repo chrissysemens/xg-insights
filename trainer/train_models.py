@@ -38,7 +38,7 @@ LEAGUE_IDS = [
     600,  # Turkey Super Lig
 ]
 
-MODEL_VERSION = os.environ.get("MODEL_VERSION", "euro-v2")
+MODEL_VERSION = os.environ.get("MODEL_VERSION", "epl-v2")
 
 
 def pick_recent_seasons(seasons: List[Dict[str, Any]], n: int = 4) -> List[Dict[str, Any]]:

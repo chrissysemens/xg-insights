@@ -74,6 +74,8 @@ async function runPredictionsWindow() {
     if (!config_1.ENV.PREDICTOR.BASE_URL) {
         throw new Error("Missing ENV.PREDICTOR.BASE_URL");
     }
+    const modelVersion = config_1.ENV.PREDICTOR.MODEL_VERSION;
+    const useV2 = modelVersion.includes("v2");
     const db = admin.firestore();
     // Scope: in-window + not started + enriched
     const qs = await db
@@ -88,10 +90,10 @@ async function runPredictionsWindow() {
     const withFeatures = fixtures.filter((f) => !!f.features).length;
     console.log(`Prediction scope: total=${total}, withFeatures=${withFeatures}, missingFeatures=${total - withFeatures}`);
     const candidates = fixtures
-        .filter((f) => !!f.features)
+        .filter((f) => !!(useV2 ? f.featuresV2 : f.features))
         .map((f) => ({
         fixtureId: String(f.id ?? f.docId),
-        features: f.features,
+        features: useV2 ? f.featuresV2 : f.features,
     }));
     console.log(`Prediction candidates: ${candidates.length}`);
     if (candidates.length === 0) {

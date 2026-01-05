@@ -8,11 +8,23 @@ from app.schemas import (
 )
 from app.feature_flatten import build_matrix
 from app.models import ModelBundle
+from pathlib import Path
+
+MODEL_DIR = Path(__file__).resolve().parent.parent / "model"
 
 app = FastAPI(title="Football Predictor", version="1.0.0")
 
 bundle: ModelBundle | None = None
 bundle_error: str | None = None
+
+import hashlib
+
+def file_hash(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 @app.on_event("startup")
@@ -40,9 +52,27 @@ def health():
 
 @app.get("/status")
 def status():
-    # Lets you see if models loaded and why not
-    return {"modelsLoaded": bundle is not None, "error": bundle_error}
+    try:
+        feature_path = MODEL_DIR / "feature_names.json"
+        result_path = MODEL_DIR / "lgbm_result.txt"
+        over25_path = MODEL_DIR / "lgbm_over25.txt"
+        btts_path = MODEL_DIR / "lgbm_btts.txt"
 
+        return {
+            "modelsLoaded": bundle is not None,
+            "bundleError": bundle_error,
+            "featureCount": len(bundle.feature_names) if bundle else None,
+            "featureNamesHash": file_hash(feature_path) if feature_path.exists() else None,
+            "resultHash": file_hash(result_path) if result_path.exists() else None,
+            "over25Hash": file_hash(over25_path) if over25_path.exists() else None,
+            "bttsHash": file_hash(btts_path) if btts_path.exists() else None,
+        }
+    except Exception as e:
+        return {
+            "modelsLoaded": bundle is not None,
+            "bundleError": bundle_error,
+            "statusError": f"{type(e).__name__}: {e}",
+        }
 
 @app.post("/predictBatch", response_model=PredictBatchResponse)
 def predict_batch(req: PredictBatchRequest):

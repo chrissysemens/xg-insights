@@ -46,3 +46,7 @@ storybook-static
 
 .env
 .env.*
+
+
+/functions/lib/**
+functions/lib

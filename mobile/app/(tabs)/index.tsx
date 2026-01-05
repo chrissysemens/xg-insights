@@ -1,6 +1,6 @@
 // app/(tabs)/index.tsx
 import React, { useMemo } from 'react';
-import { View, Pressable } from 'react-native';
+import { View, Pressable, Image } from 'react-native';
 import { AppLayout } from '@/layout/AppLayout';
 import { Screen } from '@/layout/Screen';
 import { Stack } from '@/layout/Stack';
@@ -33,7 +33,11 @@ const formatKickoff = (ts: number) => {
 const ynLabel = (pick?: 'Y' | 'N') => (pick === 'Y' ? 'Likely' : 'Unlikely');
 
 const getResultConf = (p: any) =>
-  Math.max(p?.matchResult?.H ?? 0, p?.matchResult?.D ?? 0, p?.matchResult?.A ?? 0);
+  Math.max(
+    p?.matchResult?.H ?? 0,
+    p?.matchResult?.D ?? 0,
+    p?.matchResult?.A ?? 0,
+  );
 
 const getGoalsScore = (p: any) => {
   const o = p?.over25?.Y ?? 0;
@@ -57,6 +61,8 @@ const FavouriteCard = ({
   prediction,
   homeName,
   awayName,
+  homeImage,
+  awayImage,
   c,
 }: any) => {
   const meta = highlightMeta(prediction.highlightReason);
@@ -99,7 +105,20 @@ const FavouriteCard = ({
       </View>
 
       {/* ✅ Updated: highlight the expected winner in primary colour */}
-      <View style={{ marginTop: 8, flexDirection: 'row', flexWrap: 'wrap' }}>
+      <View
+        style={{
+          marginTop: 8,
+          flexDirection: 'row',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+        }}
+      >
+        {homeImage && (
+          <Image
+            source={{ uri: homeImage }}
+            style={{ width: 20, height: 20, marginRight: 4 }}
+          />
+        )}
         <Text
           style={{
             fontSize: 15,
@@ -111,9 +130,16 @@ const FavouriteCard = ({
         </Text>
 
         <Text style={{ fontSize: 15, fontWeight: '700', color: c.text }}>
-          {' '}vs{' '}
+          {' '}
+          vs{' '}
         </Text>
 
+        {awayImage && (
+          <Image
+            source={{ uri: awayImage }}
+            style={{ width: 20, height: 20, marginRight: 4 }}
+          />
+        )}
         <Text
           style={{
             fontSize: 15,
@@ -125,12 +151,26 @@ const FavouriteCard = ({
         </Text>
       </View>
 
-      <Text style={{ marginTop: 8, fontSize: 13, fontWeight: '700', color: c.primary }}>
+      <Text
+        style={{
+          marginTop: 8,
+          fontSize: 13,
+          fontWeight: '700',
+          color: c.primary,
+        }}
+      >
         {conf}% result confidence
       </Text>
 
       {(prediction.over25 || prediction.btts) && (
-        <View style={{ marginTop: 10, flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+        <View
+          style={{
+            marginTop: 10,
+            flexDirection: 'row',
+            gap: 8,
+            flexWrap: 'wrap',
+          }}
+        >
           {prediction.over25 && (
             <View
               style={{
@@ -176,7 +216,16 @@ const FavouriteCard = ({
   );
 };
 
-const GoalsCard = ({ fixtureId, fixture, prediction, homeName, awayName, c }: any) => {
+const GoalsCard = ({
+  fixtureId,
+  fixture,
+  prediction,
+  homeName,
+  awayName,
+  homeImage,
+  awayImage,
+  c,
+}: any) => {
   const meta = highlightMeta(prediction.highlightReason);
   const chip = chipStyleForTone(meta.tone, c);
 
@@ -212,12 +261,35 @@ const GoalsCard = ({ fixtureId, fixture, prediction, homeName, awayName, c }: an
         </Text>
       </View>
 
-      <Text style={{ marginTop: 8, fontSize: 15, fontWeight: '700', color: c.text }}>
-        {homeName} vs {awayName}
-      </Text>
+      <View
+        style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center' }}
+      >
+        {homeImage && (
+          <Image
+            source={{ uri: homeImage }}
+            style={{ width: 20, height: 20, marginRight: 4 }}
+          />
+        )}
+        <Text style={{ fontSize: 15, fontWeight: '700', color: c.text }}>
+          {homeName} vs {awayName}
+        </Text>
+        {awayImage && (
+          <Image
+            source={{ uri: awayImage }}
+            style={{ width: 20, height: 20, marginLeft: 4 }}
+          />
+        )}
+      </View>
 
       {(prediction.over25 || prediction.btts) && (
-        <View style={{ marginTop: 10, flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+        <View
+          style={{
+            marginTop: 10,
+            flexDirection: 'row',
+            gap: 8,
+            flexWrap: 'wrap',
+          }}
+        >
           {prediction.over25 && (
             <View
               style={{
@@ -272,25 +344,23 @@ export default function Home() {
     constraintsKey: 'all-teams',
   });
 
-  const teamsById = useMemo(() => {
-    const map: Record<number, WithId<TeamDoc>> = {};
-    for (const t of teamsQ.data) map[Number(t.id)] = t;
-    return map;
-  }, [teamsQ.data]);
-
   const highlights = useHighlightedPredictions();
   const items = highlights.data;
 
   const clearFavourites = useMemo(() => {
     return items
       .filter((x) => x.prediction.highlightReason === 'CLEAR_FAVOURITE')
-      .sort((a, b) => getResultConf(b.prediction) - getResultConf(a.prediction));
+      .sort(
+        (a, b) => getResultConf(b.prediction) - getResultConf(a.prediction),
+      );
   }, [items]);
 
   const goalHighlights = useMemo(() => {
     return items
       .filter((x) => x.prediction.highlightReason !== 'CLEAR_FAVOURITE')
-      .sort((a, b) => getGoalsScore(b.prediction) - getGoalsScore(a.prediction));
+      .sort(
+        (a, b) => getGoalsScore(b.prediction) - getGoalsScore(a.prediction),
+      );
   }, [items]);
 
   return (
@@ -323,43 +393,28 @@ export default function Home() {
             <Text style={{ color: c.danger }}>Error: {highlights.error}</Text>
           )}
 
-          {!highlights.loading && !items.length && !highlights.error && (
-            <View
-              style={{
-                backgroundColor: c.surface,
-                borderColor: c.border,
-                borderWidth: 1,
-                borderRadius: 16,
-                padding: 14,
-              }}
-            >
-              <Text style={{ color: c.text, fontWeight: '600' }}>
-                No highlights yet
-              </Text>
-              <Text style={{ marginTop: 6, color: c.muted, fontSize: 13 }}>
-                Run predictions and your top matches will show here.
-              </Text>
-            </View>
-          )}
-
           {clearFavourites.length > 0 && (
             <View style={{ gap: 8 }}>
               <Text style={{ fontSize: 14, fontWeight: '700', color: c.text }}>
                 Clear favourites
               </Text>
 
-              {clearFavourites.map(({ fixtureId, fixture, prediction }) => {
-                const homeName = teamsById[fixture.homeTeamId]?.name ?? 'Home';
-                const awayName = teamsById[fixture.awayTeamId]?.name ?? 'Away';
+              {clearFavourites.map((item) => {
+                const homeName = item.homeTeam?.name ?? 'Home';
+                const awayName = item.awayTeam?.name ?? 'Away';
+                const homeImage = item.homeTeam?.imagePath;
+                const awayImage = item.awayTeam?.imagePath;
 
                 return (
                   <FavouriteCard
-                    key={fixtureId}
-                    fixtureId={fixtureId}
-                    fixture={fixture}
-                    prediction={prediction}
+                    key={item.fixtureId}
+                    fixtureId={item.fixtureId}
+                    fixture={item.fixture}
+                    prediction={item.prediction}
                     homeName={homeName}
                     awayName={awayName}
+                    homeImage={homeImage}
+                    awayImage={awayImage}
                     c={c}
                   />
                 );
@@ -373,18 +428,22 @@ export default function Home() {
                 Goals & BTTS
               </Text>
 
-              {goalHighlights.map(({ fixtureId, fixture, prediction }) => {
-                const homeName = teamsById[fixture.homeTeamId]?.name ?? 'Home';
-                const awayName = teamsById[fixture.awayTeamId]?.name ?? 'Away';
+              {goalHighlights.map((item) => {
+                const homeName = item.homeTeam?.name ?? 'Home';
+                const awayName = item.awayTeam?.name ?? 'Away';
+                const homeImage = item.homeTeam?.imagePath;
+                const awayImage = item.awayTeam?.imagePath;
 
                 return (
                   <GoalsCard
-                    key={fixtureId}
-                    fixtureId={fixtureId}
-                    fixture={fixture}
-                    prediction={prediction}
+                    key={item.fixtureId}
+                    fixtureId={item.fixtureId}
+                    fixture={item.fixture}
+                    prediction={item.prediction}
                     homeName={homeName}
                     awayName={awayName}
+                    homeImage={homeImage}
+                    awayImage={awayImage}
                     c={c}
                   />
                 );
