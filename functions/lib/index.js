@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.runPredictions = exports.enrichFixtures = exports.syncFixtures = void 0;
+exports.evaluateArchivedPredictions = exports.runPredictions = exports.enrichFixtures = exports.syncFixtures = void 0;
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const params_1 = require("firebase-functions/params");
 const admin = __importStar(require("firebase-admin"));
@@ -41,16 +41,17 @@ const config_1 = require("./config");
 const syncFixturesWindow_1 = require("./jobs/syncFixturesWindow");
 const enrichFixturesWindow_1 = require("./jobs/enrichFixturesWindow");
 const runPredictions_1 = require("./jobs/runPredictions");
+const evaluateArchivedPredictions_1 = require("./jobs/evaluateArchivedPredictions");
 admin.initializeApp();
 (0, config_1.assertConfig)();
 const SPORTMONKS_TOKEN = (0, params_1.defineSecret)("SPORTMONKS_TOKEN");
 exports.syncFixtures = (0, scheduler_1.onSchedule)({
-    schedule: "every 6 hours",
+    schedule: "5 */2 * * *", // ✅ hh:05 every 2 hours
     timeZone: config_1.ENV.APP.TIMEZONE,
     secrets: [SPORTMONKS_TOKEN],
     region: config_1.ENV.APP.REGION,
     memory: "512MiB",
-    timeoutSeconds: 180,
+    timeoutSeconds: 240,
 }, async () => {
     const token = SPORTMONKS_TOKEN.value();
     if (!token)
@@ -58,12 +59,12 @@ exports.syncFixtures = (0, scheduler_1.onSchedule)({
     await (0, syncFixturesWindow_1.syncFixturesWindow)(token);
 });
 exports.enrichFixtures = (0, scheduler_1.onSchedule)({
-    schedule: "every 6 hours",
+    schedule: "20 */2 * * *", // ✅ hh:20 every 2 hours
     timeZone: config_1.ENV.APP.TIMEZONE,
     secrets: [SPORTMONKS_TOKEN],
     region: config_1.ENV.APP.REGION,
     memory: "512MiB",
-    timeoutSeconds: 300,
+    timeoutSeconds: 420, // enrich can take longer
 }, async () => {
     const token = SPORTMONKS_TOKEN.value();
     if (!token)
@@ -71,14 +72,25 @@ exports.enrichFixtures = (0, scheduler_1.onSchedule)({
     await (0, enrichFixturesWindow_1.enrichFixturesWindow)(token);
 });
 exports.runPredictions = (0, scheduler_1.onSchedule)({
-    schedule: "every 2 hours",
+    schedule: "40 */2 * * *", // ✅ hh:40 every 2 hours
     timeZone: config_1.ENV.APP.TIMEZONE,
     region: config_1.ENV.APP.REGION,
     memory: "512MiB",
-    timeoutSeconds: 300,
+    timeoutSeconds: 420,
 }, async () => {
     console.log("runPredictions: starting");
     await (0, runPredictions_1.runPredictionsWindow)();
     console.log("runPredictions: done");
+});
+exports.evaluateArchivedPredictions = (0, scheduler_1.onSchedule)({
+    schedule: "55 */2 * * *", // ✅ hh:55 every 2 hours
+    timeZone: config_1.ENV.APP.TIMEZONE,
+    region: config_1.ENV.APP.REGION,
+    memory: "256MiB",
+    timeoutSeconds: 180,
+}, async () => {
+    console.log("evaluateArchivedPredictions: starting");
+    await (0, evaluateArchivedPredictions_1.evaluateArchivedPredictionsWindow)();
+    console.log("evaluateArchivedPredictions: done");
 });
 //# sourceMappingURL=index.js.map

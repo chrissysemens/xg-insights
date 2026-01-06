@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { extractCurrentGoals } from "../sportmonks/extractGoals";
 import { ENV } from "../config";
 
 type Participant = {
@@ -28,10 +29,19 @@ type Fixture = {
   state?: { id: number; short_name?: string; name?: string; state?: string };
   participants?: Participant[];
   odds?: unknown[];
+  scores?: unknown[]; // ✅ added
 };
 
-const FINISHED_STATES = new Set(["FT", "AET", "PEN"]); // expand if SportMonks uses others in your data
-// If you see additional “finished” codes in your logs, add them here.
+const FINISHED_STATES = new Set([
+  "FT",
+  "AET",
+  "PEN",
+  "POSTPONED",
+  "DELETED",
+  "ABANDONED",
+  "CANCELED",
+  "SUSPENDED",
+]);
 
 function isFinished(shortName?: string) {
   if (!shortName) return false;
@@ -79,7 +89,9 @@ export async function syncFixturesWindow(token: string) {
   const startStr = formatDateUTC(start);
   const endStr = formatDateUTC(end);
 
-  const include = "state;participants;odds;league"; // add league if you want UI metadata
+  // ✅ include scores so we can persist goals for FT matches
+  const include = "state;participants;odds;league;scores";
+
   let page = 1;
   let totalPages = 1;
 
@@ -151,8 +163,15 @@ export async function syncFixturesWindow(token: string) {
 
       const startingAtISO = new Date(f.starting_at_timestamp * 1000).toISOString();
 
+      // ✅ extract goals from scores (if present)
+      // note: extractCurrentGoals expects the fixture to include participants + scores
+      const goals = extractCurrentGoals({
+        participants: f.participants,
+        scores: (f as any).scores,
+      });
+
       // Build fixture payload once (used by both live + archive)
-      const fixturePayload = {
+      const fixturePayload: any = {
         id: f.id,
         leagueId: f.league_id,
         seasonId: f.season_id,
@@ -189,6 +208,12 @@ export async function syncFixturesWindow(token: string) {
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       };
 
+      // ✅ persist goals whenever we have them (harmless for NS, useful for FT)
+      if (goals) {
+        fixturePayload.homeGoals = goals.homeGoals;
+        fixturePayload.awayGoals = goals.awayGoals;
+      }
+
       const liveRef = db.collection("fixtures_live").doc(String(f.id));
 
       // --- ARCHIVING RULE ---
@@ -202,19 +227,16 @@ export async function syncFixturesWindow(token: string) {
           {
             ...fixturePayload,
             archivedAt: admin.firestore.FieldValue.serverTimestamp(),
+            stateShortName: f.state?.short_name ?? null,
+            evaluationDone: false,
           },
           { merge: true }
         );
         batch.delete(liveRef);
 
-        // Optional: also remove any live predictions (uncomment if desired)
-        // batch.delete(db.collection("predictions_live").doc(String(f.id)));
-
         ops += 2; // one set + one delete
       } else {
-        // Keep only not-started fixtures in live if you still want that behaviour:
-        // (Your old code skipped anything not NS.)
-        // If you'd like to also keep LIVE/HT/etc in fixtures_live, remove this guard.
+        // skip NOT 'Not started'
         if (short && short !== "NS") {
           continue;
         }

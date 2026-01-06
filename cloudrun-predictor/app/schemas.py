@@ -3,7 +3,6 @@ from pydantic import BaseModel, Field
 
 class PredictItem(BaseModel):
     fixtureId: str
-    # This is your Firestore "features" object (nested is fine)
     features: Dict[str, Any] = Field(default_factory=dict)
 
 class PredictBatchRequest(BaseModel):

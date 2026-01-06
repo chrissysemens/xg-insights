@@ -25,32 +25,52 @@ export enum HighlightReason {
 const BATCH_SIZE = 50;
 const HIGHLIGHT_TOP_N = 8;
 
-function computeHighlightScore(p: PredictBatchResponse["predictions"][number]) {
-  const resultMax = Math.max(
-    p.matchResult.H ?? 0,
-    p.matchResult.D ?? 0,
-    p.matchResult.A ?? 0
-  );
-  const overY = p.over25?.Y ?? 0;
-  const bttsY = p.btts?.Y ?? 0;
-  return Math.max(resultMax, overY, bttsY);
+// Keep these aligned with your predictor thresholds (or slightly higher)
+const BTTS_HIGHLIGHT_MIN = 0.62;
+const OVER25_HIGHLIGHT_MIN = 0.55;
+const RESULT_HIGHLIGHT_MIN = 0.48;
+
+function pickedResultProb(p: PredictBatchResponse["predictions"][number]) {
+  const pick = p.matchResult.pick;
+  if (pick === "H") return p.matchResult.H ?? 0;
+  if (pick === "D") return p.matchResult.D ?? 0;
+  return p.matchResult.A ?? 0;
 }
 
-function computeHighlightReason(
-  p: PredictBatchResponse["predictions"][number]
-): HighlightReason {
-  const resultMax = Math.max(
-    p.matchResult.H ?? 0,
-    p.matchResult.D ?? 0,
-    p.matchResult.A ?? 0
-  );
-  const overY = p.over25?.Y ?? 0;
-  const bttsY = p.btts?.Y ?? 0;
+function computeHighlightMeta(p: PredictBatchResponse["predictions"][number]) {
+  const candidates: Array<{ reason: HighlightReason; score: number }> = [];
 
-  const best = Math.max(resultMax, overY, bttsY);
-  if (best === overY) return HighlightReason.HIGH_GOALS;
-  if (best === bttsY) return HighlightReason.BTTS_LIKELY;
-  return HighlightReason.CLEAR_FAVOURITE;
+  // BTTS highlight only if pick is YES and prob is strong
+  const bttsY = p.btts?.Y ?? 0;
+  if (p.btts?.pick === "Y" && bttsY >= BTTS_HIGHLIGHT_MIN) {
+    candidates.push({ reason: HighlightReason.BTTS_LIKELY, score: bttsY });
+  }
+
+  // Over2.5 highlight only if pick is YES and prob is strong
+  const overY = p.over25?.Y ?? 0;
+  if (p.over25?.pick === "Y" && overY >= OVER25_HIGHLIGHT_MIN) {
+    candidates.push({ reason: HighlightReason.HIGH_GOALS, score: overY });
+  }
+
+  // Favourite highlight based on the picked result prob
+  const fav = pickedResultProb(p);
+  if (fav >= RESULT_HIGHLIGHT_MIN) {
+    candidates.push({ reason: HighlightReason.CLEAR_FAVOURITE, score: fav });
+  }
+
+  // Fallback: always use favourite if nothing qualified
+  if (candidates.length === 0) {
+    return {
+      highlightScore: fav,
+      highlightReason: HighlightReason.CLEAR_FAVOURITE,
+    };
+  }
+
+  candidates.sort((a, b) => b.score - a.score);
+  return {
+    highlightScore: candidates[0].score,
+    highlightReason: candidates[0].reason,
+  };
 }
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -64,12 +84,11 @@ export async function runPredictionsWindow() {
   if (!ENV.PREDICTOR.BASE_URL) {
     throw new Error("Missing ENV.PREDICTOR.BASE_URL");
   }
-  const modelVersion = ENV.PREDICTOR.MODEL_VERSION;
-  const useV2 = modelVersion.includes("v2");
 
+  const modelVersion = ENV.PREDICTOR.MODEL_VERSION;
   const db = admin.firestore();
 
-  // Scope: in-window + not started + enriched
+  // Scope: in-window + not started + enriched (v2)
   const qs = await db
     .collection("fixtures_live")
     .where("inWindow", "==", true)
@@ -81,30 +100,26 @@ export async function runPredictionsWindow() {
   const fixtures = qs.docs.map((d) => ({ docId: d.id, ...(d.data() as any) }));
 
   const total = fixtures.length;
-  const withFeatures = fixtures.filter((f) => !!f.features).length;
+  const withFeaturesV2 = fixtures.filter((f) => !!f.featuresV2).length;
 
   console.log(
-    `Prediction scope: total=${total}, withFeatures=${withFeatures}, missingFeatures=${
-      total - withFeatures
+    `Prediction scope: total=${total}, withFeaturesV2=${withFeaturesV2}, missingFeaturesV2=${
+      total - withFeaturesV2
     }`
   );
 
   const candidates = fixtures
-    .filter((f) => !!(useV2 ? f.featuresV2 : f.features))
+    .filter((f) => !!f.featuresV2)
     .map((f) => ({
       fixtureId: String(f.id ?? f.docId),
-      features: useV2 ? f.featuresV2 : f.features,
+      features: f.featuresV2,
     }));
 
   console.log(`Prediction candidates: ${candidates.length}`);
   if (candidates.length === 0) {
-    console.warn(
-      "runPredictionsWindow: no candidates (likely enrichment not run)"
-    );
+    console.warn("runPredictionsWindow: no candidates (likely enrichment not run)");
     return;
   }
-  console.log(`Prediction candidates: ${candidates.length}`);
-  if (candidates.length === 0) return;
 
   const baseUrl = ENV.PREDICTOR.BASE_URL.replace(/\/+$/, "");
   const url = `${baseUrl}/predictBatch`;
@@ -114,7 +129,7 @@ export async function runPredictionsWindow() {
     const slice = candidates.slice(i, i + BATCH_SIZE);
 
     const payload: PredictBatchRequest = {
-      modelVersion: ENV.PREDICTOR.MODEL_VERSION,
+      modelVersion,
       items: slice,
     };
 
@@ -139,12 +154,9 @@ export async function runPredictionsWindow() {
     let ops = 0;
 
     for (const p of json.predictions) {
-      const predRef = db
-        .collection("predictions_live")
-        .doc(String(p.fixtureId));
+      const predRef = db.collection("predictions_live").doc(String(p.fixtureId));
 
-      const highlightScore = computeHighlightScore(p);
-      const highlightReason = computeHighlightReason(p);
+      const meta = computeHighlightMeta(p);
 
       batch.set(
         predRef,
@@ -154,8 +166,8 @@ export async function runPredictionsWindow() {
           matchResult: p.matchResult,
           over25: p.over25 ?? null,
           btts: p.btts ?? null,
-          highlightScore,
-          highlightReason, // enum value
+          highlightScore: meta.highlightScore,
+          highlightReason: meta.highlightReason,
           highlighted: false, // set later for top N
           generatedAt: admin.firestore.FieldValue.serverTimestamp(),
         },
@@ -173,18 +185,15 @@ export async function runPredictionsWindow() {
     if (ops > 0) await batch.commit();
 
     console.log(
-      `Wrote predictions for batch ${i / BATCH_SIZE + 1} (${
-        slice.length
-      } fixtures)`
+      `Wrote predictions for batch ${Math.floor(i / BATCH_SIZE) + 1} (${slice.length} fixtures)`
     );
   }
 
   // --- 2) Select top N highlights across the same in-window fixtures and update highlighted flags ---
   const fixtureIdsInScope = fixtures
-    .filter((f) => !!f.features)
+    .filter((f) => !!f.featuresV2)
     .map((f) => String(f.id ?? f.docId));
 
-  // Fetch predictions by doc id using "in" chunks (Firestore max 10)
   const predDocs: Array<admin.firestore.QueryDocumentSnapshot> = [];
   for (const ids of chunk(fixtureIdsInScope, 10)) {
     const pq = await db
