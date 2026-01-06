@@ -8,8 +8,8 @@ from app.models import ModelBundle
 
 MODEL_DIR = Path(__file__).resolve().parent.parent / "model"
 
-OVER25_THRESHOLD = float(os.getenv("OVER25_THRESHOLD", "0.55"))
-BTTS_THRESHOLD = float(os.getenv("BTTS_THRESHOLD", "0.62"))
+OVER25_THRESHOLD = float(os.getenv("OVER25_THRESHOLD", "0.535"))
+BTTS_THRESHOLD = float(os.getenv("BTTS_THRESHOLD", "0.535"))
 
 app = FastAPI(title="Football Predictor", version="1.0.0")
 

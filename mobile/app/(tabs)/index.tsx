@@ -171,7 +171,7 @@ const FavouriteCard = ({
             flexWrap: 'wrap',
           }}
         >
-          {prediction.over25 && (
+          {prediction.over25 && prediction.over25.pick === 'Y' && (
             <View
               style={{
                 paddingHorizontal: 10,
@@ -182,16 +182,11 @@ const FavouriteCard = ({
                 borderColor: c.border,
               }}
             >
-              <Text style={{ fontSize: 12, color: c.text2 }}>
-                Over 2.5:{' '}
-                <Text style={{ fontSize: 10, fontWeight: '700' }}>
-                  {ynLabel(prediction.over25.pick)}
-                </Text>
-              </Text>
+              <Text style={{ fontSize: 12, color: c.text2 }}>Over 2.5</Text>
             </View>
           )}
 
-          {prediction.btts && (
+          {prediction.btts && prediction.btts.pick === 'Y' && (
             <View
               style={{
                 paddingHorizontal: 10,
@@ -202,12 +197,7 @@ const FavouriteCard = ({
                 borderColor: c.border,
               }}
             >
-              <Text style={{ fontSize: 12, color: c.text2 }}>
-                BTTS:{' '}
-                <Text style={{ fontSize: 10, fontWeight: '700' }}>
-                  {ynLabel(prediction.btts.pick)}
-                </Text>
-              </Text>
+              <Text style={{ fontSize: 12, color: c.text2 }}>BTTS</Text>
             </View>
           )}
         </View>
@@ -290,7 +280,7 @@ const GoalsCard = ({
             flexWrap: 'wrap',
           }}
         >
-          {prediction.over25 && (
+          {prediction.over25 && prediction.over25.pick === 'Y' && (
             <View
               style={{
                 paddingHorizontal: 10,
@@ -301,16 +291,11 @@ const GoalsCard = ({
                 borderColor: c.border,
               }}
             >
-              <Text style={{ fontSize: 12, color: c.text2 }}>
-                Over 2.5:{' '}
-                <Text style={{ fontSize: 10, fontWeight: '700' }}>
-                  {ynLabel(prediction.over25.pick)}
-                </Text>
-              </Text>
+              <Text style={{ fontSize: 12, color: c.text2 }}>Over 2.5</Text>
             </View>
           )}
 
-          {prediction.btts && (
+          {prediction.btts && prediction.btts.pick === 'Y' && (
             <View
               style={{
                 paddingHorizontal: 10,
@@ -321,12 +306,7 @@ const GoalsCard = ({
                 borderColor: c.border,
               }}
             >
-              <Text style={{ fontSize: 12, color: c.text2 }}>
-                BTTS:{' '}
-                <Text style={{ fontSize: 10, fontWeight: '700' }}>
-                  {ynLabel(prediction.btts.pick)}
-                </Text>
-              </Text>
+              <Text style={{ fontSize: 12, color: c.text2 }}>BTTS</Text>
             </View>
           )}
         </View>
@@ -396,7 +376,7 @@ export default function Home() {
           {clearFavourites.length > 0 && (
             <View style={{ gap: 8 }}>
               <Text style={{ fontSize: 14, fontWeight: '700', color: c.text }}>
-                Clear favourites
+                Match Winners
               </Text>
 
               {clearFavourites.map((item) => {
