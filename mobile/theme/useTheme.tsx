@@ -2,7 +2,7 @@ import { useColorScheme } from 'react-native';
 import { useAppStore } from '../state/useAppStore';
 import { darkColors, lightColors } from './colours';
 import { spacing, radii, sizes } from './tokens';
-import { typography } from './typography';
+import { typography, fontFamilies } from './typography';
 
 export type ResolvedTheme = 'light' | 'dark';
 
@@ -22,6 +22,7 @@ export function useTheme() {
     radii,
     sizes,
     typography,
+    fontFamilies,
     components: {
       controlHeight: sizes.controlMd,
       controlRadius: radii.md,

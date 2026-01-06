@@ -13,16 +13,15 @@ const deviceLanguage = (
 ).toLowerCase();
 
 const supported = Object.keys(resources);
-const lng = supported.includes(deviceLanguage) ? deviceLanguage : 'en';
+const lng = 'en'; // supported.includes(deviceLanguage) ? deviceLanguage : 'en';
 
-if (!i18n.isInitialized) {
-  i18n.use(initReactI18next).init({
-    resources,
-    lng,
-    fallbackLng: 'en',
-    interpolation: { escapeValue: false },
-    returnNull: false,
-  });
-}
+i18n.use(initReactI18next).init({
+  resources,
+  lng,
+  fallbackLng: 'en',
+  defaultNS: 'translation',
+  interpolation: { escapeValue: false },
+  returnNull: false,
+});
 
 export default i18n;

@@ -1,7 +1,7 @@
-import { Tabs } from "expo-router";
-import { useTheme } from '../../theme/useTheme'; 
-import { Header } from "@/components/header/Header";
-import { Text } from "@/components";
+import { Tabs } from 'expo-router';
+import { useTheme } from '../../theme/useTheme';
+import { Header } from '@/components/header/Header';
+import { Text } from '@/components';
 
 export default function TabsLayout() {
   const { theme } = useTheme();
@@ -31,10 +31,29 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Home",
+          title: 'Home',
           tabBarIcon: ({ color }) => (
             <Text style={{ color, fontSize: 16 }}>🏠</Text>
-          )}}
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="performance"
+        options={{
+          title: 'Performance',
+          tabBarIcon: ({ color }) => (
+            <Text style={{ color, fontSize: 16 }}>📊</Text>
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="about"
+        options={{
+          title: 'About',
+          tabBarIcon: ({ color }) => (
+            <Text style={{ color, fontSize: 16 }}>ℹ️</Text>
+          ),
+        }}
       />
     </Tabs>
   );
