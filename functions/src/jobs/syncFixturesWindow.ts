@@ -128,7 +128,9 @@ export async function syncFixturesWindow(token: string) {
       const participants = f.participants ?? [];
       const mapped = extractHomeAway(participants);
       if (!mapped) {
-        console.warn(`Fixture ${f.id} missing home/away participants; skipping`);
+        console.warn(
+          `Fixture ${f.id} missing home/away participants; skipping`
+        );
         continue;
       }
 
@@ -161,7 +163,9 @@ export async function syncFixturesWindow(token: string) {
         }
       }
 
-      const startingAtISO = new Date(f.starting_at_timestamp * 1000).toISOString();
+      const startingAtISO = new Date(
+        f.starting_at_timestamp * 1000
+      ).toISOString();
 
       // ✅ extract goals from scores (if present)
       // note: extractCurrentGoals expects the fixture to include participants + scores
@@ -215,6 +219,16 @@ export async function syncFixturesWindow(token: string) {
       }
 
       const liveRef = db.collection("fixtures_live").doc(String(f.id));
+
+      // Exclude cup competitions
+      const ALLOWED_LEAGUE_IDS = new Set<number>([
+        8, 9, 72, 82, 181, 208, 244, 271, 301, 384, 387, 444, 453, 462, 501,
+        564, 567, 573, 591, 600,
+      ]);
+
+      if (!ALLOWED_LEAGUE_IDS.has(f.league_id)) {
+        continue;
+      }
 
       // --- ARCHIVING RULE ---
       // If fixture is finished, move to fixtures_archive and remove from fixtures_live.

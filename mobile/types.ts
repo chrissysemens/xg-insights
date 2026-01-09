@@ -54,3 +54,39 @@ export enum HighlightReason {
   HIGH_GOALS = 'HIGH_GOALS',
   BTTS_LIKELY = 'BTTS_LIKELY',
 }
+
+export type ArchivedFixture = {
+  evaluation?: {
+    actual?: {
+      result?: 'H' | 'D' | 'A';
+      btts?: 'Y' | 'N';
+      over25?: 'Y' | 'N';
+    };
+    correct?: {
+      result?: boolean;
+      btts?: boolean;
+      over25?: boolean;
+    };
+  };
+};
+
+export type ArchivedFixtureDoc = {
+  evaluationDone?: boolean;
+  startingAtTimestamp?: number;
+  evaluation?: {
+    predicted?: {
+      resultPick?: 'H' | 'D' | 'A';
+      bttsPick?: 'Y' | 'N';
+      over25Pick?: 'Y' | 'N';
+    };
+    actual?: {
+      result?: 'H' | 'D' | 'A';
+      btts?: 'Y' | 'N';
+      over25?: 'Y' | 'N';
+    };
+  };
+};
+
+export type Metric = { correct: number; total: number };
+
+export type Datum = { x: number; y: number };

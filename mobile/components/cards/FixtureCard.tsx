@@ -1,8 +1,12 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Pressable, Image } from 'react-native';
 import { Text } from '../text/Text';
 import { chipStyleForTone, highlightMeta } from '@/utils/highlight-reason';
 import { useTranslation } from 'react-i18next';
+
+type Pick = 'H' | 'D' | 'A';
+
+type FixtureCardVariant = 'winner' | 'goals';
 
 type FixtureCardProps = {
   fixtureId: string;
@@ -13,8 +17,7 @@ type FixtureCardProps = {
   homeImage?: string | null;
   awayImage?: string | null;
   theme: any;
-  showConfidence?: boolean;
-  highlightPick?: boolean;
+  variant: FixtureCardVariant;
 };
 
 const formatKickoff = (ts: number) => {
@@ -37,12 +40,213 @@ const getResultConf = (p: any) =>
 
 const roundToNearest25 = (p: number) => Math.round(p / 2.5) * 2.5;
 
-const teamStyle = (which: 'home' | 'away', pick?: 'H' | 'D' | 'A', c?: any) => {
+const teamStyle = (which: 'home' | 'away', pick?: Pick, c?: any) => {
   if (!pick || pick === 'D') return { color: c.text };
   if (pick === 'H' && which === 'home') return { color: c.primary };
   if (pick === 'A' && which === 'away') return { color: c.primary };
   return { color: c.text };
 };
+
+function HighlightBadge({
+  theme,
+  colours: c,
+  prediction,
+}: {
+  theme: any;
+  colours: any;
+  prediction: any;
+}) {
+  const meta = highlightMeta(prediction.highlightReason);
+  const chip = chipStyleForTone(meta.tone, c);
+
+  const { t } = useTranslation();
+
+  return (
+    <View
+      style={{
+        marginTop: theme.spacing[2],
+        alignSelf: 'flex-start',
+        paddingHorizontal: theme.spacing[2],
+        paddingVertical: theme.spacing[1],
+        borderRadius: theme.radii.pill,
+        backgroundColor: chip.bg,
+        borderWidth: theme.components.borderWidth,
+        borderColor: chip.border,
+      }}
+    >
+      <Text
+        style={{
+          ...theme.typography.caption,
+          fontFamily: theme.fontFamilies.bold,
+          color: chip.fg,
+        }}
+      >
+        {meta.icon} {t(meta.labelKey)}
+      </Text>
+    </View>
+  );
+}
+
+function TeamsRow({
+  theme,
+  colours: c,
+  homeName,
+  awayName,
+  homeImage,
+  awayImage,
+  pick, // undefined => no highlighting
+}: {
+  theme: any;
+  colours: any;
+  homeName: string;
+  awayName: string;
+  homeImage?: string | null;
+  awayImage?: string | null;
+  pick?: Pick;
+}) {
+  const showVsTokens = !!pick; // when winner variant, keep “vs” separate and colour teams
+
+  return (
+    <View
+      style={{
+        marginTop: theme.spacing[2],
+        flexDirection: 'row',
+        alignItems: 'center',
+        flexWrap: showVsTokens ? 'wrap' : undefined,
+      }}
+    >
+      {homeImage && (
+        <Image
+          source={{ uri: homeImage }}
+          style={{
+            width: theme.sizes.iconMd,
+            height: theme.sizes.iconMd,
+            marginRight: theme.spacing[1],
+          }}
+        />
+      )}
+
+      <Text
+        style={{
+          ...theme.typography.label,
+          fontFamily: theme.fontFamilies.bold,
+          ...(pick ? teamStyle('home', pick, c) : { color: c.text }),
+        }}
+      >
+        {homeName}
+      </Text>
+
+      <Text
+        style={{
+          ...theme.typography.label,
+          fontFamily: theme.fontFamilies.bold,
+          color: c.text,
+        }}
+      >
+        {showVsTokens ? ' vs ' : ' vs '}
+      </Text>
+
+      <Text
+        style={{
+          ...theme.typography.label,
+          fontFamily: theme.fontFamilies.bold,
+          ...(pick ? teamStyle('away', pick, c) : { color: c.text }),
+        }}
+      >
+        {awayName}
+      </Text>
+
+      {awayImage && (
+        <Image
+          source={{ uri: awayImage }}
+          style={{
+            width: theme.sizes.iconMd,
+            height: theme.sizes.iconMd,
+            marginLeft: theme.spacing[1],
+          }}
+        />
+      )}
+    </View>
+  );
+}
+
+function ConfidenceRow({
+  theme,
+  colours: c,
+  prediction,
+}: {
+  theme: any;
+  colours: any;
+  prediction: any;
+}) {
+  const { t } = useTranslation();
+  const conf = roundToNearest25(getResultConf(prediction) * 100);
+
+  return (
+    <Text
+      style={{
+        marginTop: theme.spacing[2],
+        marginLeft: theme.spacing[1],
+        ...theme.typography.caption,
+        fontFamily: theme.fontFamilies.bold,
+        color: c.primary,
+      }}
+    >
+      {t('home.resultConfidence', { conf })}
+    </Text>
+  );
+}
+
+function GoalsChips({
+  theme,
+  colours: c,
+  prediction,
+}: {
+  theme: any;
+  colours: any;
+  prediction: any;
+}) {
+  const { t } = useTranslation();
+  const showOver = prediction.over25?.pick === 'Y';
+  const showBtts = prediction.btts?.pick === 'Y';
+
+  if (!showOver && !showBtts) return null;
+
+  const chipStyle = {
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[1],
+    borderRadius: theme.radii.pill,
+    backgroundColor: c.surface2,
+    borderWidth: theme.components.borderWidth,
+    borderColor: c.border,
+  };
+
+  return (
+    <View
+      style={{
+        marginTop: theme.spacing[3],
+        flexDirection: 'row',
+        gap: theme.spacing[2],
+        flexWrap: 'wrap',
+      }}
+    >
+      {showOver && (
+        <View style={chipStyle}>
+          <Text style={{ ...theme.typography.caption, color: c.text2 }}>
+            {t('home.over25')}
+          </Text>
+        </View>
+      )}
+      {showBtts && (
+        <View style={chipStyle}>
+          <Text style={{ ...theme.typography.caption, color: c.text2 }}>
+            {t('home.btts')}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
 
 export const FixtureCard: React.FC<FixtureCardProps> = ({
   fixtureId,
@@ -53,20 +257,14 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
   homeImage,
   awayImage,
   theme,
-  showConfidence = false,
-  highlightPick = false,
+  variant,
 }) => {
   const c = theme.colours;
-  const { t } = useTranslation();
-  const meta = highlightMeta(prediction.highlightReason);
-  const chip = chipStyleForTone(meta.tone, c);
 
-  const confRaw = showConfidence ? getResultConf(prediction) * 100 : 0;
-  const conf = roundToNearest25(confRaw);
-
-  const pick = highlightPick
-    ? (prediction?.matchResult?.pick as 'H' | 'D' | 'A' | undefined)
-    : undefined;
+  const pick: Pick | undefined = useMemo(() => {
+    if (variant !== 'winner') return undefined;
+    return prediction?.matchResult?.pick as Pick | undefined;
+  }, [variant, prediction]);
 
   return (
     <Pressable
@@ -83,185 +281,24 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
         {formatKickoff(fixture.startingAtTimestamp)}
       </Text>
 
-      <View
-        style={{
-          marginTop: theme.spacing[2],
-          alignSelf: 'flex-start',
-          paddingHorizontal: theme.spacing[3],
-          paddingVertical: theme.spacing[1],
-          borderRadius: theme.radii.pill,
-          backgroundColor: chip.bg,
-          borderWidth: theme.components.borderWidth,
-          borderColor: chip.border,
-        }}
-      >
-        <Text
-          style={{
-            ...theme.typography.caption,
-            fontFamily: theme.fontFamilies.bold,
-            color: chip.fg,
-          }}
-        >
-          {meta.icon} {meta.label}
-        </Text>
-      </View>
+      <HighlightBadge theme={theme} colours={c} prediction={prediction} />
 
-      {highlightPick ? (
-        <View
-          style={{
-            marginTop: theme.spacing[2],
-            flexDirection: 'row',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-          }}
-        >
-          {homeImage && (
-            <Image
-              source={{ uri: homeImage }}
-              style={{
-                width: theme.sizes.iconMd,
-                height: theme.sizes.iconMd,
-                marginRight: theme.spacing[1],
-              }}
-            />
-          )}
-          <Text
-            style={{
-              ...theme.typography.label,
-              fontFamily: theme.fontFamilies.bold,
-              ...teamStyle('home', pick, c),
-            }}
-          >
-            {homeName}
-          </Text>
+      <TeamsRow
+        theme={theme}
+        colours={c}
+        homeName={homeName}
+        awayName={awayName}
+        homeImage={homeImage}
+        awayImage={awayImage}
+        pick={pick}
+      />
 
-          <Text
-            style={{
-              ...theme.typography.label,
-              fontFamily: theme.fontFamilies.bold,
-              color: c.text,
-            }}
-          >
-            {' '}
-            vs{' '}
-          </Text>
-
-          {awayImage && (
-            <Image
-              source={{ uri: awayImage }}
-              style={{
-                width: theme.sizes.iconMd,
-                height: theme.sizes.iconMd,
-                marginLeft: theme.spacing[1],
-              }}
-            />
-          )}
-          <Text
-            style={{
-              ...theme.typography.label,
-              fontFamily: theme.fontFamilies.bold,
-              ...teamStyle('away', pick, c),
-            }}
-          >
-            {awayName}
-          </Text>
-        </View>
-      ) : (
-        <View
-          style={{
-            marginTop: theme.spacing[2],
-            flexDirection: 'row',
-            alignItems: 'center',
-          }}
-        >
-          {homeImage && (
-            <Image
-              source={{ uri: homeImage }}
-              style={{
-                width: theme.sizes.iconMd,
-                height: theme.sizes.iconMd,
-                marginRight: theme.spacing[1],
-              }}
-            />
-          )}
-          <Text
-            style={{
-              ...theme.typography.label,
-              fontFamily: theme.fontFamilies.bold,
-              color: c.text,
-            }}
-          >
-            {homeName} vs {awayName}
-          </Text>
-          {awayImage && (
-            <Image
-              source={{ uri: awayImage }}
-              style={{
-                width: theme.sizes.iconMd,
-                height: theme.sizes.iconMd,
-                marginLeft: theme.spacing[1],
-              }}
-            />
-          )}
-        </View>
+      {variant === 'winner' && (
+        <ConfidenceRow theme={theme} colours={c} prediction={prediction} />
       )}
 
-      {showConfidence && (
-        <Text
-          style={{
-            marginTop: theme.spacing[2],
-            ...theme.typography.caption,
-            fontFamily: theme.fontFamilies.bold,
-            color: c.primary,
-          }}
-        >
-          {t('home.resultConfidence', { conf })}
-        </Text>
-      )}
-
-      {(prediction.over25 || prediction.btts) && (
-        <View
-          style={{
-            marginTop: theme.spacing[3],
-            flexDirection: 'row',
-            gap: theme.spacing[2],
-            flexWrap: 'wrap',
-          }}
-        >
-          {prediction.over25 && prediction.over25.pick === 'Y' && (
-            <View
-              style={{
-                paddingHorizontal: theme.spacing[3],
-                paddingVertical: theme.spacing[1],
-                borderRadius: theme.radii.pill,
-                backgroundColor: c.surface2,
-                borderWidth: theme.components.borderWidth,
-                borderColor: c.border,
-              }}
-            >
-              <Text style={{ ...theme.typography.caption, color: c.text2 }}>
-                {t('home.over25')}
-              </Text>
-            </View>
-          )}
-
-          {prediction.btts && prediction.btts.pick === 'Y' && (
-            <View
-              style={{
-                paddingHorizontal: theme.spacing[3],
-                paddingVertical: theme.spacing[1],
-                borderRadius: theme.radii.pill,
-                backgroundColor: c.surface2,
-                borderWidth: theme.components.borderWidth,
-                borderColor: c.border,
-              }}
-            >
-              <Text style={{ ...theme.typography.caption, color: c.text2 }}>
-                {t('home.btts')}
-              </Text>
-            </View>
-          )}
-        </View>
+      {variant === 'goals' && (
+        <GoalsChips theme={theme} colours={c} prediction={prediction} />
       )}
     </Pressable>
   );

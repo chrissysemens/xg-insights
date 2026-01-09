@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { AppLayout } from '@/layout/AppLayout';
 import { Screen } from '@/layout/Screen';
@@ -47,32 +47,31 @@ export default function Home() {
   const clearFavourites = useMemo(() => {
     return items
       .filter((x) => x.prediction.highlightReason === 'CLEAR_FAVOURITE')
-      .sort(
-        (a, b) => getResultConf(b.prediction) - getResultConf(a.prediction),
-      );
+      .sort((a, b) => getResultConf(b.prediction) - getResultConf(a.prediction));
   }, [items]);
 
   const goalHighlights = useMemo(() => {
     return items
       .filter((x) => x.prediction.highlightReason !== 'CLEAR_FAVOURITE')
-      .sort(
-        (a, b) => getGoalsScore(b.prediction) - getGoalsScore(a.prediction),
-      );
+      .sort((a, b) => getGoalsScore(b.prediction) - getGoalsScore(a.prediction));
   }, [items]);
 
   return (
     <AppLayout safe>
       <Header />
 
-      <Screen scroll>
+      {/* ✅ Not scrollable: header stays visible */}
+      <Screen>
         <Stack
-          gap={theme.spacing[3]}
+          gap={3}
           style={{
+            flex: 1, // ✅ important so ScrollView has height
             paddingHorizontal: theme.spacing[4],
             paddingTop: theme.spacing[2],
             paddingBottom: theme.spacing[6],
           }}
         >
+          {/* ✅ Pinned header */}
           <View style={{ gap: theme.spacing[1] }}>
             <Text
               style={{
@@ -89,9 +88,7 @@ export default function Home() {
           </View>
 
           {(highlights.loading || teamsQ.loading) && (
-            <Text style={{ color: c.muted }}>
-              {t('home.loadingHighlights')}
-            </Text>
+            <Text style={{ color: c.muted }}>{t('home.loadingHighlights')}</Text>
           )}
 
           {!!highlights.error && (
@@ -100,81 +97,71 @@ export default function Home() {
             </Text>
           )}
 
-          {clearFavourites.length > 0 && (
-            <View style={{ gap: theme.spacing[2] }}>
-              <Text
-                style={{
-                  ...theme.typography.label,
-                  fontFamily: theme.fontFamilies.bold,
-                  color: c.text,
-                }}
-              >
-                {t('home.matchWinners')}
-              </Text>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{
+              paddingBottom: theme.spacing[6],
+              gap: theme.spacing[3],
+            }}
+          >
+            {clearFavourites.length > 0 && (
+              <View style={{ gap: theme.spacing[2] }}>
+                <Text
+                  style={{
+                    ...theme.typography.label,
+                    fontFamily: theme.fontFamilies.bold,
+                    color: c.text,
+                  }}
+                >
+                  {t('home.matchWinners')}
+                </Text>
 
-              {clearFavourites.map((item) => {
-                const homeName = item.homeTeam?.name ?? 'Home';
-                const awayName = item.awayTeam?.name ?? 'Away';
-                const homeImage = item.homeTeam?.imagePath;
-                const awayImage = item.awayTeam?.imagePath;
-
-                return (
+                {clearFavourites.map((item) => (
                   <FixtureCard
                     key={item.fixtureId}
                     fixtureId={item.fixtureId}
                     fixture={item.fixture}
                     prediction={item.prediction}
-                    homeName={homeName}
-                    awayName={awayName}
-                    homeImage={homeImage}
-                    awayImage={awayImage}
+                    homeName={item.homeTeam?.name ?? 'Home'}
+                    awayName={item.awayTeam?.name ?? 'Away'}
+                    homeImage={item.homeTeam?.imagePath}
+                    awayImage={item.awayTeam?.imagePath}
                     theme={theme}
-                    showConfidence={true}
-                    highlightPick={true}
+                    variant="winner"
                   />
-                );
-              })}
-            </View>
-          )}
+                ))}
+              </View>
+            )}
 
-          {goalHighlights.length > 0 && (
-            <View
-              style={{ gap: theme.spacing[2], marginTop: theme.spacing[2] }}
-            >
-              <Text
-                style={{
-                  ...theme.typography.label,
-                  fontFamily: theme.fontFamilies.bold,
-                  color: c.text,
-                }}
-              >
-                {t('home.goalsAndBtts')}
-              </Text>
+            {goalHighlights.length > 0 && (
+              <View style={{ gap: theme.spacing[2], marginTop: theme.spacing[2] }}>
+                <Text
+                  style={{
+                    ...theme.typography.label,
+                    fontFamily: theme.fontFamilies.bold,
+                    color: c.text,
+                  }}
+                >
+                  {t('home.goalsAndBtts')}
+                </Text>
 
-              {goalHighlights.map((item) => {
-                const homeName = item.homeTeam?.name ?? 'Home';
-                const awayName = item.awayTeam?.name ?? 'Away';
-                const homeImage = item.homeTeam?.imagePath;
-                const awayImage = item.awayTeam?.imagePath;
-
-                return (
+                {goalHighlights.map((item) => (
                   <FixtureCard
                     key={item.fixtureId}
                     fixtureId={item.fixtureId}
                     fixture={item.fixture}
                     prediction={item.prediction}
-                    homeName={homeName}
-                    awayName={awayName}
-                    homeImage={homeImage}
-                    awayImage={awayImage}
+                    homeName={item.homeTeam?.name ?? 'Home'}
+                    awayName={item.awayTeam?.name ?? 'Away'}
+                    homeImage={item.homeTeam?.imagePath}
+                    awayImage={item.awayTeam?.imagePath}
                     theme={theme}
-                    showConfidence={false}
-                    highlightPick={false}
+                    variant="goals"
                   />
-                );
-              })}
-            </View>
-          )}
+                ))}
+              </View>
+            )}
+          </ScrollView>
         </Stack>
       </Screen>
     </AppLayout>

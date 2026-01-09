@@ -4,13 +4,21 @@
   },
   "home": {
     "highlightedFixtures": "Highlighted fixtures",
-    "topPicksDescription": "Top picks from the latest model run",
+    "topPicksDescription": "Top picks from the latest model run (next 5 days)",
     "loadingHighlights": "Loading highlights…",
     "error": "Error: {{error}}",
-    "matchWinners": "Match Winners",
+    "matchWinners": "Match Result",
     "goalsAndBtts": "Goals & BTTS",
     "over25": "Over 2.5",
     "btts": "BTTS",
-    "resultConfidence": "{{conf}}% result confidence"
+    "resultConfidence": "{{conf}}% result confidence",
+    "matchWinner": "Match winner",
+    "highGoals": "High goals",
+    "bttsLikely": "BTTS likely",
+    "highlighted": "Highlighted"
+  },
+  "performance": {
+    "modelPerformance": "Model Performance",
+    "performanceDescription": "Overview of the model's prediction accuracy over time."
   }
 }

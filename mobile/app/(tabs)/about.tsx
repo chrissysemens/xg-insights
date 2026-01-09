@@ -5,6 +5,7 @@ import { Stack } from '@/layout/Stack';
 import { Text } from '@/components';
 import { useTheme } from '@/theme/useTheme';
 import { Header } from '@/components/header/Header';
+import { spacing } from '@/theme/tokens';
 
 export default function AboutScreen() {
   const { theme } = useTheme();
@@ -12,9 +13,8 @@ export default function AboutScreen() {
 
   return (
     <AppLayout>
-      <Header title="About" />
       <Screen>
-        <Stack gap="md">
+        <Stack gap={3}>
           <Text style={{ color: colours.text, fontSize: 18 }}>
             About Football Boost Machine
           </Text>

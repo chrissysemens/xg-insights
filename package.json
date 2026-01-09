@@ -1,7 +1,10 @@
 {
   "dependencies": {
     "firebase": "^12.7.0",
-    "firebase-admin": "^13.6.0"
+    "firebase-admin": "^13.6.0",
+    "react-native-svg": "^15.15.1",
+    "victory": "^37.3.6",
+    "victory-native": "^41.20.2"
   },
   "devDependencies": {
     "babel-plugin-module-resolver": "^5.0.2"

@@ -1,0 +1,21 @@
+// TODO: Model improvemnt notes
+
+/** Bologna vs Atalanta */
+Revisit model result bias once sample size ≥ 50–75 fixtures
+Focus areas:
+
+Home advantage weighting in close-position matchups
+
+Strength priors vs raw league position
+
+Compare result accuracy vs BTTS / O2.5 accuracy
+
+Add confusion breakdown (H→A, D→H, etc.)
+
+
+/** Cremonese vs Cagliri */
+Cremonese–Cagliari (2–2): model misread game state.
+Low-table parity fixtures may need higher BTTS / O2.5 bias.
+Investigate volatility features (defensive errors, goals conceded, pressure matches).
+
+If both teams are bottom-half and close in position → boost BTTS / Over probability
