@@ -8,7 +8,6 @@ import { Text, FixtureCard } from '@/components';
 import { useTheme } from '@/theme/useTheme';
 import { Header } from '@/components/header/Header';
 
-import { useFirebase } from '@/hooks/useFirebase';
 import { useHighlightedPredictions } from '@/hooks/useHighlightedPredictions';
 
 type TeamDoc = {
@@ -19,9 +18,14 @@ type TeamDoc = {
 };
 
 const getGoalsScore = (p: any) => {
+  // New: single chosen goals badge from backend (never both)
+  const gp = p?.goalsPick;
+  if (gp?.pick === 'Y' && typeof gp?.prob === 'number') return gp.prob;
+
+  // Fallback for older docs
   const o = p?.over25?.Y ?? 0;
   const b = p?.btts?.Y ?? 0;
-  return (o + b) / 2;
+  return Math.max(o, b);
 };
 
 const getResultConf = (p: any) =>
@@ -36,13 +40,8 @@ export default function Home() {
   const { t } = useTranslation();
   const c = theme.colours;
 
-  const teamsQ = useFirebase<TeamDoc>({
-    collectionName: 'teams',
-    constraintsKey: 'all-teams',
-  });
-
   const highlights = useHighlightedPredictions();
-  const items = highlights.data;
+  const items = highlights.data ?? [];
 
   const clearFavourites = useMemo(() => {
     return items
@@ -59,19 +58,16 @@ export default function Home() {
   return (
     <AppLayout safe>
       <Header />
-
-      {/* ✅ Not scrollable: header stays visible */}
       <Screen>
         <Stack
           gap={3}
           style={{
-            flex: 1, // ✅ important so ScrollView has height
+            flex: 1,
             paddingHorizontal: theme.spacing[4],
             paddingTop: theme.spacing[2],
             paddingBottom: theme.spacing[6],
           }}
         >
-          {/* ✅ Pinned header */}
           <View style={{ gap: theme.spacing[1] }}>
             <Text
               style={{
@@ -87,7 +83,7 @@ export default function Home() {
             </Text>
           </View>
 
-          {(highlights.loading || teamsQ.loading) && (
+          {highlights.loading && (
             <Text style={{ color: c.muted }}>{t('home.loadingHighlights')}</Text>
           )}
 

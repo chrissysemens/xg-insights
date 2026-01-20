@@ -1,10 +1,10 @@
-import { ArchivedFixture, ArchivedFixtureDoc, Metric } from "@/types";
+import { ArchivedFixture, ArchivedFixtureDoc, Metric } from '@/types';
 
 export const accuracy = <T extends string>(
   items: ArchivedFixture[],
   getPred: (f: ArchivedFixture) => T | undefined,
-  getActual: (f: ArchivedFixture) => T | undefined
-) =>{
+  getActual: (f: ArchivedFixture) => T | undefined,
+) => {
   let predicted = 0;
   let correct = 0;
 
@@ -18,7 +18,7 @@ export const accuracy = <T extends string>(
   }
 
   return { predicted, correct };
-}
+};
 
 export function calcResultAccuracy(docs: ArchivedFixtureDoc[]): Metric {
   let correct = 0;
@@ -81,7 +81,9 @@ const weekStartMsFromUnixSeconds = (unixSeconds: number) => {
   return d.getTime(); // ms (good for chart x)
 };
 
-export function buildWeeklyResultAccuracy(fixtures: ArchivedFixtureDoc[]): Datum[] {
+export function buildWeeklyResultAccuracy(
+  fixtures: ArchivedFixtureDoc[],
+): Datum[] {
   const buckets = new Map<number, { total: number; correct: number }>();
 
   for (const f of fixtures) {
@@ -103,11 +105,29 @@ export function buildWeeklyResultAccuracy(fixtures: ArchivedFixtureDoc[]): Datum
     buckets.set(x, b);
   }
 
-  return Array.from(buckets.entries())
-    .sort(([a], [b]) => a - b)
-    .map(([x, { total, correct }]) => ({
-      x,
-      y: total > 0 ? Math.round((correct / total) * 100) : 0,
-    }));
-}
+  const weeks = Array.from(buckets.keys()).sort((a, b) => a - b);
+  if (weeks.length === 0) return [];
 
+  const weekMs = 7 * 24 * 60 * 60 * 1000;
+  const start = weeks[0];
+  const end = weeks[weeks.length - 1];
+
+  // Compute first week's accuracy to initialize carry-forward
+  const firstBucket = buckets.get(start)!;
+  let lastY = Math.round(
+    (firstBucket.correct / Math.max(1, firstBucket.total)) * 100,
+  );
+
+  const series: Datum[] = [];
+  for (let w = start; w <= end; w += weekMs) {
+    const b = buckets.get(w);
+    if (b) {
+      const y = b.total > 0 ? Math.round((b.correct / b.total) * 100) : lastY;
+      lastY = y;
+    }
+    // If no predictions for the week, carry forward the last known accuracy
+    series.push({ x: w, y: lastY });
+  }
+
+  return series;
+}

@@ -11,7 +11,7 @@ export const ENV = {
   },
   PREDICTOR: {
     BASE_URL: process.env.PREDICTOR_BASE_URL,
-    MODEL_VERSION: process.env.MODEL_VERSION ?? "epl-v2",
+    MODEL_VERSION: process.env.MODEL_VERSION ?? "epl-v3",
   },
 
   APP: {

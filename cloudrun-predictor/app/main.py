@@ -1,15 +1,18 @@
 import os
 import numpy as np
 from fastapi import FastAPI, HTTPException
-from pathlib import Path
-from app.schemas import PredictBatchRequest, PredictBatchResponse, PredictionOut, MatchResultOut, BinaryOut
+from app.schemas import (
+    PredictBatchRequest,
+    PredictBatchResponse,
+    PredictionOut,
+    MatchResultOut,
+    BinaryOut,
+)
 from app.feature_flatten import build_matrix
 from app.models import ModelBundle
 
-MODEL_DIR = Path(__file__).resolve().parent.parent / "model"
-
 OVER25_THRESHOLD = float(os.getenv("OVER25_THRESHOLD", "0.535"))
-BTTS_THRESHOLD = float(os.getenv("BTTS_THRESHOLD", "0.535"))
+BTTS_THRESHOLD = float(os.getenv("BTTS_THRESHOLD", "0.534"))
 
 app = FastAPI(title="Football Predictor", version="1.0.0")
 
@@ -44,7 +47,7 @@ def predict_batch(req: PredictBatchRequest):
     feats = [it.features for it in req.items]
     X = build_matrix(feats, bundle.feature_names)
 
-    pr = bundle.predict_result(X)  # (n,3)
+    pr = bundle.predict_result(X)  # (n, 3) in order [H, D, A]
     p_over = bundle.predict_binary(bundle.over25, X)  # (n,)
     p_btts = bundle.predict_binary(bundle.btts, X)    # (n,)
 
@@ -52,20 +55,28 @@ def predict_batch(req: PredictBatchRequest):
     if len(req.items) > 0:
         over_arr = np.asarray(p_over, dtype=float)
         btts_arr = np.asarray(p_btts, dtype=float)
-        print("Probs:", {
-            "over25": {"min": float(over_arr.min()), "mean": float(over_arr.mean()), "max": float(over_arr.max())},
-            "btts": {"min": float(btts_arr.min()), "mean": float(btts_arr.mean()), "max": float(btts_arr.max())},
-        })
+        print(
+            "Probs:",
+            {
+                "over25": {
+                    "min": float(over_arr.min()),
+                    "mean": float(over_arr.mean()),
+                    "max": float(over_arr.max()),
+                },
+                "btts": {
+                    "min": float(btts_arr.min()),
+                    "mean": float(btts_arr.mean()),
+                    "max": float(btts_arr.max()),
+                },
+            },
+        )
 
     preds: list[PredictionOut] = []
     for i, it in enumerate(req.items):
         pH, pD, pA = float(pr[i, 0]), float(pr[i, 1]), float(pr[i, 2])
 
-        pick = "H"
-        if pD > pH and pD >= pA:
-            pick = "D"
-        elif pA > pH and pA > pD:
-            pick = "A"
+        # deterministic argmax
+        pick = max({"H": pH, "D": pD, "A": pA}, key=lambda k: {"H": pH, "D": pD, "A": pA}[k])
 
         match_out = MatchResultOut(H=pH, D=pD, A=pA, pick=pick)
 
@@ -83,11 +94,13 @@ def predict_batch(req: PredictBatchRequest):
             pick=("Y" if btts_y >= BTTS_THRESHOLD else "N"),
         )
 
-        preds.append(PredictionOut(
-            fixtureId=it.fixtureId,
-            matchResult=match_out,
-            over25=over_out,
-            btts=btts_out,
-        ))
+        preds.append(
+            PredictionOut(
+                fixtureId=it.fixtureId,
+                matchResult=match_out,
+                over25=over_out,
+                btts=btts_out,
+            )
+        )
 
     return PredictBatchResponse(modelVersion=req.modelVersion, predictions=preds)

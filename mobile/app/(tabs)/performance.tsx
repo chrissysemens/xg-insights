@@ -8,10 +8,14 @@ import { useTheme } from '@/theme/useTheme';
 import { useFirebase } from '@/hooks/useFirebase';
 import { DonutChart, type DonutSlice } from '@/components/charts/Doughnut';
 
-import { buildWeeklyResultAccuracy, calcResultAccuracy, calcSignalAccuracy } from '@/utils/accuracy';
+import {
+  buildWeeklyResultAccuracy,
+  calcResultAccuracy,
+  calcSignalAccuracy,
+} from '@/utils/accuracy';
 import type { ArchivedFixtureDoc } from '@/types';
 import { Header } from '@/components/header/Header';
-import { View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Row } from '@/layout/Row';
 import { AnimatedLine } from '@/components/charts/AnimatedLine';
@@ -67,21 +71,10 @@ export default function PerformanceScreen() {
   const pct = (correct: number, total: number) =>
     total > 0 ? Math.round((correct / total) * 100) : 0;
 
-  /*const weeklyResultLine = useMemo(
+  const weeklyResultLine = useMemo(
     () => buildWeeklyResultAccuracy(fixtures),
-    [fixtures]
-);*/
-
-const MOCK_WEEKLY_RESULT_LINE = [
-  { x: Date.parse('2025-11-04'), y: 42 },
-  { x: Date.parse('2025-11-11'), y: 47 },
-  { x: Date.parse('2025-11-18'), y: 51 },
-  { x: Date.parse('2025-11-25'), y: 49 },
-  { x: Date.parse('2025-12-02'), y: 55 },
-  { x: Date.parse('2025-12-09'), y: 58 },
-  { x: Date.parse('2025-12-16'), y: 61 },
-  { x: Date.parse('2025-12-23'), y: 63 },
-];
+    [fixtures],
+  );
 
   const { t } = useTranslation();
 
@@ -112,50 +105,63 @@ const MOCK_WEEKLY_RESULT_LINE = [
               {t('performance.performanceDescription')}
             </Text>
           </View>
-          {!loading && !error && totalEvaluated > 0 && (
-            <Stack gap={3}>
-              <DonutChart
-                title="Match Result Accuracy"
-                data={resultDonut}
-                centerText={
-                  result.total > 0
-                    ? `${result.correct}/${result.total}\n${pct(result.correct, result.total)}%`
-                    : 'No predictions'
-                }
-              />
 
-              <Row gap={3} align="flex-start" fullWidth>
-                <Stack flex={1} fullWidth style={{ minWidth: 0 }}>
-                  <DonutChart
-                    title="Match Result Accuracy"
-                    data={resultDonut}
-                    centerText={
-                      result.total > 0
-                        ? `${result.correct}/${result.total}\n${pct(result.correct, result.total)}%`
-                        : 'No predictions'
-                    }
-                  />
-                </Stack>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{
+              paddingBottom: theme.spacing[6],
+              gap: theme.spacing[3],
+            }}
+          >
+            {!loading && !error && totalEvaluated > 0 && (
+              <Stack gap={3}>
+                <DonutChart
+                  title="Match Result picks"
+                  data={resultDonut}
+                  centerText={
+                    result.total > 0
+                      ? `${result.correct}/${result.total}\n${pct(result.correct, result.total)}%`
+                      : 'No predictions'
+                  }
+                />
 
-                <Stack flex={1} fullWidth style={{ minWidth: 0 }}>
-                  <DonutChart
-                    title="Match Result Accuracy"
-                    data={resultDonut}
-                    centerText={
-                      result.total > 0
-                        ? `${result.correct}/${result.total}\n${pct(result.correct, result.total)}%`
-                        : 'No predictions'
-                    }
-                  />
-                </Stack>
-              </Row>
-              <Row fullWidth>
-                <Stack gap={3} flex={1}>
-                  <AnimatedLine data={MOCK_WEEKLY_RESULT_LINE} />
-                </Stack>
+                <Row gap={3} align="flex-start" fullWidth>
+                  <Stack flex={1} fullWidth style={{ minWidth: 0 }}>
+                    <DonutChart
+                      title="Over 2.5 goals"
+                      data={over25Donut}
+                      centerText={
+                        result.total > 0
+                          ? `${over25.correct}/${over25.total}\n${pct(over25.correct, over25.total)}%`
+                          : 'No predictions'
+                      }
+                    />
+                  </Stack>
+
+                  <Stack flex={1} fullWidth style={{ minWidth: 0 }}>
+                    <DonutChart
+                      title="BTTS"
+                      data={bttsDonut}
+                      centerText={
+                        result.total > 0
+                          ? `${btts.correct}/${btts.total}\n${pct(btts.correct, btts.total)}%`
+                          : 'No predictions'
+                      }
+                    />
+                  </Stack>
                 </Row>
-            </Stack>
-          )}
+                <Row fullWidth>
+                  <Stack gap={3} flex={1}>
+                    <AnimatedLine
+                      title={t('performance.overTime')}
+                      subtitle={t('performance.weeklyAccuracy')}
+                      data={weeklyResultLine}
+                    />
+                  </Stack>
+                </Row>
+              </Stack>
+            )}
+          </ScrollView>
         </Stack>
       </Screen>
     </AppLayout>

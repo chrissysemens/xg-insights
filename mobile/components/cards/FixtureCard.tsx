@@ -3,6 +3,7 @@ import { View, Pressable, Image } from 'react-native';
 import { Text } from '../text/Text';
 import { chipStyleForTone, highlightMeta } from '@/utils/highlight-reason';
 import { useTranslation } from 'react-i18next';
+import { router } from 'expo-router';
 
 type Pick = 'H' | 'D' | 'A';
 
@@ -47,7 +48,7 @@ const teamStyle = (which: 'home' | 'away', pick?: Pick, c?: any) => {
   return { color: c.text };
 };
 
-function HighlightBadge({
+const HighlightBadge = ({
   theme,
   colours: c,
   prediction,
@@ -55,7 +56,7 @@ function HighlightBadge({
   theme: any;
   colours: any;
   prediction: any;
-}) {
+}) => {
   const meta = highlightMeta(prediction.highlightReason);
   const chip = chipStyleForTone(meta.tone, c);
 
@@ -85,92 +86,118 @@ function HighlightBadge({
       </Text>
     </View>
   );
-}
+};
 
-function TeamsRow({
-  theme,
-  colours: c,
-  homeName,
-  awayName,
-  homeImage,
-  awayImage,
-  pick, // undefined => no highlighting
-}: {
+type Props = {
   theme: any;
   colours: any;
   homeName: string;
   awayName: string;
   homeImage?: string | null;
   awayImage?: string | null;
-  pick?: Pick;
-}) {
-  const showVsTokens = !!pick; // when winner variant, keep “vs” separate and colour teams
+  pick?: 'H' | 'D' | 'A';
+};
+
+export const TeamsRow: React.FC<Props> = ({
+  theme,
+  colours: c,
+  homeName,
+  awayName,
+  homeImage,
+  awayImage,
+  pick,
+}) => {
+  const isHomePick = pick === 'H';
+  const isAwayPick = pick === 'A';
 
   return (
     <View
       style={{
-        marginTop: theme.spacing[2],
         flexDirection: 'row',
         alignItems: 'center',
-        flexWrap: showVsTokens ? 'wrap' : undefined,
+        marginTop: theme.spacing[3],
+        gap: theme.spacing[3],
       }}
     >
-      {homeImage && (
-        <Image
-          source={{ uri: homeImage }}
+      {/* HOME */}
+      <View
+        style={{
+          flex: 1,
+          flexDirection: 'row',
+          alignItems: 'center',
+          minWidth: 0,
+        }}
+      >
+        {!!homeImage && (
+          <Image
+            source={{ uri: homeImage }}
+            style={{
+              width: 22,
+              height: 22,
+              borderRadius: 11,
+              marginRight: theme.spacing[2],
+            }}
+          />
+        )}
+        <Text
+          numberOfLines={1}
           style={{
-            width: theme.sizes.iconMd,
-            height: theme.sizes.iconMd,
-            marginRight: theme.spacing[1],
+            ...theme.typography.body,
+            color: c.text,
+            fontFamily: isHomePick
+              ? theme.fontFamilies.bold
+              : theme.fontFamilies.regular,
+            flexShrink: 1,
           }}
-        />
-      )}
+        >
+          {homeName}
+        </Text>
+      </View>
 
-      <Text
+      {/* VS / spacer */}
+      <Text style={{ ...theme.typography.caption, color: c.muted }}>vs</Text>
+
+      {/* AWAY */}
+      <View
         style={{
-          ...theme.typography.label,
-          fontFamily: theme.fontFamilies.bold,
-          ...(pick ? teamStyle('home', pick, c) : { color: c.text }),
+          flex: 1,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          minWidth: 0,
         }}
       >
-        {homeName}
-      </Text>
-
-      <Text
-        style={{
-          ...theme.typography.label,
-          fontFamily: theme.fontFamilies.bold,
-          color: c.text,
-        }}
-      >
-        {showVsTokens ? ' vs ' : ' vs '}
-      </Text>
-
-      <Text
-        style={{
-          ...theme.typography.label,
-          fontFamily: theme.fontFamilies.bold,
-          ...(pick ? teamStyle('away', pick, c) : { color: c.text }),
-        }}
-      >
-        {awayName}
-      </Text>
-
-      {awayImage && (
-        <Image
-          source={{ uri: awayImage }}
+        <Text
+          numberOfLines={1}
           style={{
-            width: theme.sizes.iconMd,
-            height: theme.sizes.iconMd,
-            marginLeft: theme.spacing[1],
+            ...theme.typography.body,
+            color: c.text,
+            fontFamily: isAwayPick
+              ? theme.fontFamilies.bold
+              : theme.fontFamilies.regular,
+            flexShrink: 1,
+            textAlign: 'right',
           }}
-        />
-      )}
+        >
+          {awayName}
+        </Text>
+        {!!awayImage && (
+          <Image
+            source={{ uri: awayImage }}
+            style={{
+              width: 22,
+              height: 22,
+              borderRadius: 11,
+              marginLeft: theme.spacing[2],
+            }}
+          />
+        )}
+      </View>
     </View>
   );
-}
+};
 
-function ConfidenceRow({
+const ConfidenceRow = ({
   theme,
   colours: c,
   prediction,
@@ -178,7 +205,7 @@ function ConfidenceRow({
   theme: any;
   colours: any;
   prediction: any;
-}) {
+}) => {
   const { t } = useTranslation();
   const conf = roundToNearest25(getResultConf(prediction) * 100);
 
@@ -195,9 +222,9 @@ function ConfidenceRow({
       {t('home.resultConfidence', { conf })}
     </Text>
   );
-}
+};
 
-function GoalsChips({
+const GoalsChips = ({
   theme,
   colours: c,
   prediction,
@@ -205,7 +232,7 @@ function GoalsChips({
   theme: any;
   colours: any;
   prediction: any;
-}) {
+}) => {
   const { t } = useTranslation();
   const showOver = prediction.over25?.pick === 'Y';
   const showBtts = prediction.btts?.pick === 'Y';
@@ -246,7 +273,7 @@ function GoalsChips({
       )}
     </View>
   );
-}
+};
 
 export const FixtureCard: React.FC<FixtureCardProps> = ({
   fixtureId,
@@ -269,6 +296,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
   return (
     <Pressable
       key={fixtureId}
+      onPress={() => router.push(`/fixture/${fixture.id}`)}
       style={{
         backgroundColor: c.surface,
         borderColor: c.border,

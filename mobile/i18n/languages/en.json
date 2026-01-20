@@ -19,6 +19,8 @@
   },
   "performance": {
     "modelPerformance": "Model Performance",
-    "performanceDescription": "Overview of the model's prediction accuracy over time."
+    "performanceDescription": "Overview of the model's prediction accuracy over time.",
+    "overTime": "Performance over time",
+    "weeklyAccuracy": "Weekly accuracy (%)"
   }
 }

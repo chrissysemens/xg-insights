@@ -1,2 +1,2 @@
 firebase deploy --only "functions"
-firebase functions:config:set predictor.base_url="https://cloudrun-predictor-506885133704.europe-west2.run.app" predictor.model_version="epl-v2" 
+firebase functions:config:set predictor.base_url="https://cloudrun-predictor-506885133704.europe-west2.run.app" predictor.model_version="epl-v3" 

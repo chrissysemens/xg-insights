@@ -6,8 +6,7 @@ class PredictItem(BaseModel):
     features: Dict[str, Any] = Field(default_factory=dict)
 
 class PredictBatchRequest(BaseModel):
-    modelRelease: str = "epl-v2"
-    modelVersion: str = "lgbm_v1"
+    modelVersion: str = "epl-v3"
     items: List[PredictItem]
 
 class MatchResultOut(BaseModel):

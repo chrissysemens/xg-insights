@@ -35,6 +35,7 @@ export function DonutChart({
         backgroundColor: colours.surface,
         borderRadius: 16,
         padding: 14,
+        minHeight: 285,
       }}
     >
       <Text variant="h3" style={{ color: colours.text, fontSize: 16 }}>
@@ -43,33 +44,39 @@ export function DonutChart({
 
       <View style={{ alignItems: 'center', marginTop: 10 }}>
         <View style={{ width: size, height: size }}>
-          <PolarChart
-            data={data}
-            colorKey="color"
-            valueKey="value"
-            labelKey="label"
-          >
-            <PieChart innerRadius={innerRadius} startAngle={-90}>
-              {(slice: PieSliceData) => <Pie.Slice />}
-            </PieChart>
-          </PolarChart>
-
-          {!!centerText && (
-            <View
-              style={{
-                position: 'absolute',
-                inset: 0,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Text
-                variant="bodyStrong"
-                style={{ color: colours.text, fontSize: 18 }}
+          {data.length > 0 ? (
+            <>
+              <PolarChart
+                data={data}
+                colorKey="color"
+                valueKey="value"
+                labelKey="label"
               >
-                {centerText}
-              </Text>
-            </View>
+                <PieChart innerRadius={innerRadius} startAngle={-90}>
+                  {(slice: PieSliceData) => <Pie.Slice />}
+                </PieChart>
+              </PolarChart>
+
+              {!!centerText && (
+                <View
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Text
+                    variant="bodyStrong"
+                    style={{ color: colours.text, fontSize: 18 }}
+                  >
+                    {centerText}
+                  </Text>
+                </View>
+              )}
+            </>
+          ) : (
+            <></>
           )}
         </View>
 

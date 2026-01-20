@@ -13,16 +13,36 @@ import {
 } from 'firebase/firestore';
 import { useState, useEffect, useMemo } from 'react';
 
+type FixtureDetailsDoc = {
+  fixtureId: string;
+  homeTeamId: number;
+  awayTeamId: number;
+  form?: {
+    homeLast5?: Array<'W' | 'D' | 'L'> | null;
+    awayLast5?: Array<'W' | 'D' | 'L'> | null;
+  } | null;
+};
+
+const chunk = <T,>(arr: T[], size: number) => {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+};
+
 export const useHighlightedPredictions = () => {
-  const [preds, setPreds] = useState<PredictionDoc[]>([]);
+  const [preds, setPreds] = useState<Array<PredictionDoc & { _id: string }>>(
+    [],
+  );
   const [fixturesById, setFixturesById] = useState<Record<string, FixtureDoc>>(
     {},
   );
   const [teamsById, setTeamsById] = useState<Record<string, TeamDoc>>({});
+  const [detailsById, setDetailsById] = useState<
+    Record<string, FixtureDetailsDoc>
+  >({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 1) subscribe to highlighted predictions
   useEffect(() => {
     setLoading(true);
     setError(null);
@@ -31,13 +51,16 @@ export const useHighlightedPredictions = () => {
       collection(db, 'predictions_live'),
       where('highlighted', '==', true),
       orderBy('highlightScore', 'desc'),
-      limit(10), // <= keep it at 10 so we can use documentId() "in" without chunking
+      limit(10),
     );
 
     const unsub: Unsubscribe = onSnapshot(
       qPred,
       (snap) => {
-        const next = snap.docs.map((d) => d.data() as PredictionDoc);
+        const next = snap.docs.map((d) => ({
+          _id: d.id,
+          ...(d.data() as PredictionDoc),
+        }));
         setPreds(next);
         setLoading(false);
       },
@@ -50,11 +73,9 @@ export const useHighlightedPredictions = () => {
     return () => unsub();
   }, []);
 
-  // 2) fetch fixtures for the current highlighted fixtureIds
-  const fixtureIds = useMemo(
-    () => preds.map((p) => String(p.fixtureId)),
-    [preds],
-  );
+  const fixtureIds = useMemo(() => {
+    return preds.map((p) => String(p.fixtureId ?? p._id));
+  }, [preds]);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,7 +87,6 @@ export const useHighlightedPredictions = () => {
       }
 
       try {
-        // Because we limit preds to 10, we can do a single "in" query.
         const qFix = query(
           collection(db, 'fixtures_live'),
           where(documentId(), 'in', fixtureIds),
@@ -76,9 +96,7 @@ export const useHighlightedPredictions = () => {
         if (cancelled) return;
 
         const map: Record<string, FixtureDoc> = {};
-        for (const d of snap.docs) {
-          map[d.id] = d.data() as FixtureDoc;
-        }
+        for (const d of snap.docs) map[d.id] = d.data() as FixtureDoc;
         setFixturesById(map);
       } catch (e: any) {
         if (!cancelled)
@@ -90,14 +108,53 @@ export const useHighlightedPredictions = () => {
     return () => {
       cancelled = true;
     };
-  }, [fixtureIds.join('|')]); // stable dep
+  }, [fixtureIds.join('|')]);
 
-  // 3) fetch teams for the fixtures
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      if (fixtureIds.length === 0) {
+        setDetailsById({});
+        return;
+      }
+
+      try {
+        const chunks = chunk(fixtureIds, 10);
+        const allDocs: Array<{ id: string; data: FixtureDetailsDoc }> = [];
+
+        for (const ids of chunks) {
+          const qDet = query(
+            collection(db, 'fixture_details'),
+            where(documentId(), 'in', ids),
+          );
+          const snap = await getDocs(qDet);
+          for (const d of snap.docs) {
+            allDocs.push({ id: d.id, data: d.data() as FixtureDetailsDoc });
+          }
+        }
+
+        if (cancelled) return;
+
+        const map: Record<string, FixtureDetailsDoc> = {};
+        for (const x of allDocs) map[x.id] = x.data;
+        setDetailsById(map);
+      } catch (e: any) {
+        console.warn('Failed to load fixture_details', e?.message ?? e);
+      }
+    }
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [fixtureIds.join('|')]);
+
   const teamIds = useMemo(() => {
     const ids = new Set<string>();
     Object.values(fixturesById).forEach((fx) => {
-      ids.add(String(fx.homeTeamId));
-      ids.add(String(fx.awayTeamId));
+      if (fx?.homeTeamId != null) ids.add(String(fx.homeTeamId));
+      if (fx?.awayTeamId != null) ids.add(String(fx.awayTeamId));
     });
     return Array.from(ids);
   }, [fixturesById]);
@@ -112,18 +169,23 @@ export const useHighlightedPredictions = () => {
       }
 
       try {
-        const qTeams = query(
-          collection(db, 'teams'),
-          where(documentId(), 'in', teamIds),
-        );
+        const chunks = chunk(teamIds, 10);
+        const all: Array<{ id: string; data: TeamDoc }> = [];
 
-        const snap = await getDocs(qTeams);
+        for (const ids of chunks) {
+          const qTeams = query(
+            collection(db, 'teams'),
+            where(documentId(), 'in', ids),
+          );
+          const snap = await getDocs(qTeams);
+          for (const d of snap.docs)
+            all.push({ id: d.id, data: d.data() as TeamDoc });
+        }
+
         if (cancelled) return;
 
         const map: Record<string, TeamDoc> = {};
-        for (const d of snap.docs) {
-          map[d.id] = d.data() as TeamDoc;
-        }
+        for (const x of all) map[x.id] = x.data;
         setTeamsById(map);
       } catch (e: any) {
         if (!cancelled)
@@ -137,27 +199,29 @@ export const useHighlightedPredictions = () => {
     };
   }, [teamIds.join('|')]);
 
-  // 4) join
   const items: HighlightItem[] = useMemo(() => {
     return preds
       .map((p) => {
-        const fx = fixturesById[String(p.fixtureId)];
+        const fid = String(p.fixtureId ?? p._id);
+        const fx = fixturesById[fid];
         if (!fx) return null;
+
         return {
-          fixtureId: String(p.fixtureId),
+          fixtureId: fid,
           fixture: fx,
           prediction: p,
           homeTeam: teamsById[String(fx.homeTeamId)],
           awayTeam: teamsById[String(fx.awayTeamId)],
+          fixtureDetails: detailsById[fid] ?? null,
         };
       })
       .filter(Boolean) as HighlightItem[];
-  }, [preds, fixturesById, teamsById]);
-  
+  }, [preds, fixturesById, teamsById, detailsById]);
+
   return {
     data: items,
     loading,
     error,
-    raw: { preds, fixturesById, teamsById },
+    raw: { preds, fixturesById, teamsById, detailsById },
   };
 };

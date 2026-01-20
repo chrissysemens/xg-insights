@@ -31,8 +31,28 @@ function extractFinalScore(fx: any): { hg: number; ag: number } | null {
   }
 
   // Pattern C: SportsMonks-ish shapes vary by endpoint
-  if (fx.scores?.localteam_score != null && fx.scores?.visitorteam_score != null) {
-    return { hg: Number(fx.scores.localteam_score), ag: Number(fx.scores.visitorteam_score) };
+  if (
+    fx.scores?.localteam_score != null &&
+    fx.scores?.visitorteam_score != null
+  ) {
+    return {
+      hg: Number(fx.scores.localteam_score),
+      ag: Number(fx.scores.visitorteam_score),
+    };
+  }
+
+  if (Array.isArray(fx.scores)) {
+    const s = fx.scores.find(
+      (x: any) =>
+        x?.description === "CURRENT" ||
+        x?.description === "FT" ||
+        x?.description === "AET",
+    );
+    const home = s?.score?.home;
+    const away = s?.score?.away;
+    if (typeof home === "number" && typeof away === "number") {
+      return { hg: home, ag: away };
+    }
   }
 
   return null;
@@ -59,7 +79,9 @@ export async function evaluateArchivedPredictionsWindow() {
   const fixtureIds = snap.docs.map((d) => d.id);
 
   // Predictions are stored by fixtureId (doc id) in predictions_live
-  const predRefs = fixtureIds.map((id) => db.collection("predictions_live").doc(id));
+  const predRefs = fixtureIds.map((id) =>
+    db.collection("predictions_live").doc(id),
+  );
   const predSnaps = await db.getAll(...predRefs);
 
   const predsById = new Map<string, FirebaseFirestore.DocumentData>();
@@ -112,7 +134,9 @@ export async function evaluateArchivedPredictionsWindow() {
       result: !!predRes && predRes === actualRes,
     };
 
-    const scoreCount = [correct.btts, correct.over25, correct.result].filter(Boolean).length;
+    const scoreCount = [correct.btts, correct.over25, correct.result].filter(
+      Boolean,
+    ).length;
 
     batch.update(fxDoc.ref, {
       evaluationDone: true,
@@ -122,8 +146,18 @@ export async function evaluateArchivedPredictionsWindow() {
         evaluatedAt: admin.firestore.FieldValue.serverTimestamp(),
         modelVersion: pred.modelVersion ?? null,
 
-        actual: { hg, ag, btts: actualBtts, over25: actualOver, result: actualRes },
-        predicted: { bttsPick: predBtts ?? null, over25Pick: predOver ?? null, resultPick: predRes ?? null },
+        actual: {
+          hg,
+          ag,
+          btts: actualBtts,
+          over25: actualOver,
+          result: actualRes,
+        },
+        predicted: {
+          bttsPick: predBtts ?? null,
+          over25Pick: predOver ?? null,
+          resultPick: predRes ?? null,
+        },
         correct,
         score: scoreCount,
       },

@@ -87,6 +87,34 @@ export type ArchivedFixtureDoc = {
   };
 };
 
+export type FormLetter = 'W' | 'D' | 'L';
+
+export type FixtureDetailsDoc = {
+  fixtureId: string;
+  startingAtTimestamp?: number;
+  league?: { id: number; name: string } | null;
+  home: { id: number; name: string; imagePath?: string | null };
+  away: { id: number; name: string; imagePath?: string | null };
+  form?: {
+    homeLast5?: FormLetter[] | null;
+    awayLast5?: FormLetter[] | null;
+  } | null;
+  h2h?: Array<{
+    homeName: string;
+    awayName: string;
+    homeGoals: number;
+    awayGoals: number;
+    startingAtTimestamp: number;
+  }> | null;
+  prediction?: {
+    matchResult: { H: number; D: number; A: number; pick: 'H' | 'D' | 'A' };
+    over25?: { Y: number; N: number; pick: 'Y' | 'N' } | null;
+    btts?: { Y: number; N: number; pick: 'Y' | 'N' } | null;
+    highlightReason: 'HIGH_GOALS' | 'BTTS_LIKELY' | 'CLEAR_FAVOURITE';
+    highlightScore: number;
+    highlighted: boolean;
+  } | null;
+};
 export type Metric = { correct: number; total: number };
 
 export type Datum = { x: number; y: number };
