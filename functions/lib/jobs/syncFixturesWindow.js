@@ -37,7 +37,6 @@ exports.syncFixturesWindow = syncFixturesWindow;
 const admin = __importStar(require("firebase-admin"));
 const extractGoals_1 = require("../sportmonks/extractGoals");
 const config_1 = require("../config");
-// ✅ POSTPONED removed here because we hard-delete it instead of archiving
 const FINISHED_STATES = new Set([
     "FT",
     "AET",
@@ -78,12 +77,17 @@ function extractHomeAway(participants) {
     };
 }
 function safeLeagueName(f) {
-    // SportMonks league include typically gives league.name
     const n = f?.league?.name;
     if (typeof n === "string" && n.trim())
         return n.trim();
-    // fallback: fixture name sometimes contains league, but keep it simple:
     return String(f.league_id);
+}
+function getPagination(json) {
+    // SportMonks responses can vary by endpoint/version:
+    // some use json.pagination, some use json.meta.pagination
+    return (json?.pagination ??
+        json?.meta?.pagination ??
+        null);
 }
 /**
  * Sync fixtures for next N days into fixtures_live
@@ -91,26 +95,32 @@ function safeLeagueName(f) {
  */
 async function syncFixturesWindow(token) {
     const db = admin.firestore();
+    console.log("LOOKAHEAD_DAYS (code) =", config_1.ENV.FEATURES.FIXTURE_LOOKAHEAD_DAYS);
+    console.log("LOOKAHEAD_DAYS (env)  =", process.env.FIXTURE_LOOKAHEAD_DAYS);
     const start = new Date();
     const end = addDaysUTC(start, config_1.ENV.FEATURES.FIXTURE_LOOKAHEAD_DAYS);
+    // ✅ IMPORTANT: make the API end date inclusive-safe (avoids “last day missing”)
+    const endForApi = addDaysUTC(end, 1);
     const startStr = formatDateUTC(start);
-    const endStr = formatDateUTC(end);
-    // ✅ include league so we can persist league name for fixture details
+    const endStr = formatDateUTC(end); // what you *mean* (window)
+    const endStrApi = formatDateUTC(endForApi); // what you *query*
+    // include league so we can persist league name for fixture details
     const include = "state;participants;odds;league;scores";
-    let page = 1;
-    let totalPages = 1;
-    console.log(`Syncing fixtures between ${startStr} and ${endStr}...`);
+    console.log(`Syncing fixtures between ${startStr} and ${endStr} (API query end=${endStrApi})...`);
     // In-run set to avoid upserting same team repeatedly
     const seenTeams = new Set();
-    // ✅ Track which fixtures SportMonks actually returned this run
+    // Track which fixtures SportMonks actually returned this run
     const seenFixtureIds = new Set();
     // Exclude cup competitions
     const ALLOWED_LEAGUE_IDS = new Set([
         8, 9, 72, 82, 181, 208, 244, 271, 301, 384, 387, 444, 453, 462, 501, 564,
         567, 573, 591, 600,
     ]);
-    while (page <= totalPages) {
-        const url = `${config_1.ENV.SPORTSMONKS.BASE_URL}/fixtures/between/${startStr}/${endStr}` +
+    // ✅ Pagination: don’t assume total_pages exists
+    let page = 1;
+    let hasMore = true;
+    while (hasMore) {
+        const url = `${config_1.ENV.SPORTSMONKS.BASE_URL}/fixtures/between/${startStr}/${endStrApi}` +
             `?api_token=${encodeURIComponent(token)}` +
             `&include=${encodeURIComponent(include)}` +
             `&page=${page}`;
@@ -121,22 +131,71 @@ async function syncFixturesWindow(token) {
         }
         const json = await res.json();
         const fixtures = json?.data ?? [];
-        totalPages = json?.meta?.pagination?.total_pages ?? 1;
-        console.log(`Page ${page}/${totalPages}: ${fixtures.length} fixtures`);
+        const pagination = getPagination(json);
+        const hasMoreFromApi = typeof pagination?.has_more === "boolean" ? pagination.has_more : null;
+        // Fallback behaviour if the API doesn’t provide has_more:
+        // - if we got 0 fixtures, stop
+        // - otherwise, keep going *one more page* and rely on the 0 page to stop
+        hasMore = hasMoreFromApi ?? fixtures.length > 0;
+        const totalPagesMaybe = typeof pagination?.total_pages === "number"
+            ? pagination.total_pages
+            : undefined;
+        console.log(`Page ${page}${totalPagesMaybe ? `/${totalPagesMaybe}` : ""}: ${fixtures.length} fixtures (hasMore=${String(hasMoreFromApi ?? "unknown")})`);
+        // 🔎 One-run counters to explain “why do I have so few fixtures?”
+        let total = 0;
+        let notAllowedLeague = 0;
+        let missingParticipants = 0;
+        let postponed = 0;
+        let finished = 0;
+        let nonNS = 0;
+        let written = 0;
         let batch = db.batch();
         let ops = 0;
         for (const f of fixtures) {
+            total++;
             // Filter leagues early
-            if (!ALLOWED_LEAGUE_IDS.has(f.league_id))
+            if (!ALLOWED_LEAGUE_IDS.has(f.league_id)) {
+                notAllowedLeague++;
                 continue;
+            }
             const fixtureId = String(f.id);
             seenFixtureIds.add(fixtureId);
             const short = f.state?.short_name ?? undefined;
             const participants = f.participants ?? [];
             const mapped = extractHomeAway(participants);
             if (!mapped) {
+                missingParticipants++;
                 console.warn(`Fixture ${f.id} missing home/away participants; skipping`);
                 continue;
+            }
+            // --- POSTPONED RULE ---
+            if (short === "POSTPONED") {
+                postponed++;
+                const liveRef = db.collection("fixtures_live").doc(fixtureId);
+                const predRef = db.collection("predictions_live").doc(fixtureId);
+                const detailsRef = db.collection("fixture_details").doc(fixtureId);
+                batch.delete(liveRef);
+                batch.delete(predRef);
+                batch.delete(detailsRef);
+                ops += 3;
+                if (ops >= 450) {
+                    await batch.commit();
+                    batch = db.batch();
+                    ops = 0;
+                }
+                continue;
+            }
+            // ✅ Finished fixtures go to archive (not live)
+            if (isFinished(short)) {
+                finished++;
+                // (we still upsert archive + details below)
+            }
+            else {
+                // keep NS-only in fixtures_live (your current rule)
+                if (short && short !== "NS") {
+                    nonNS++;
+                    continue;
+                }
             }
             // Upsert teams (once per run per team)
             for (const t of [mapped.home, mapped.away]) {
@@ -162,22 +221,19 @@ async function syncFixturesWindow(token) {
                 }
             }
             const startingAtISO = new Date(f.starting_at_timestamp * 1000).toISOString();
-            // ✅ extract goals from scores (if present)
             const goals = (0, extractGoals_1.extractCurrentGoals)({
                 participants: f.participants,
                 scores: f.scores,
             });
-            // Shared "league" block for both live + details docs
             const leagueName = safeLeagueName(f);
             const leagueBlock = {
                 id: f.league_id,
                 name: leagueName,
             };
-            // Build fixture payload once (used by both live + archive)
             const fixturePayload = {
                 id: f.id,
                 leagueId: f.league_id,
-                leagueName, // ✅ handy for list UI too
+                leagueName,
                 seasonId: f.season_id,
                 stageId: f.stage_id ?? null,
                 roundId: f.round_id ?? null,
@@ -200,7 +256,7 @@ async function syncFixturesWindow(token) {
                     }
                     : null,
                 oddsAvailable: Array.isArray(f.odds) && f.odds.length > 0,
-                // Window markers
+                // Window markers (store the “meaningful” end)
                 inWindow: true,
                 windowStart: startStr,
                 windowEnd: endStr,
@@ -212,19 +268,9 @@ async function syncFixturesWindow(token) {
             }
             const liveRef = db.collection("fixtures_live").doc(fixtureId);
             const archRef = db.collection("fixtures_archive").doc(fixtureId);
-            const predRef = db.collection("predictions_live").doc(fixtureId);
             const detailsRef = db.collection("fixture_details").doc(fixtureId);
-            // --- POSTPONED RULE ---
-            // remove from live + prediction + details
-            if (short === "POSTPONED") {
-                batch.delete(liveRef);
-                batch.delete(predRef);
-                batch.delete(detailsRef);
-                ops += 3;
-                continue;
-            }
-            // --- ARCHIVING RULE ---
             if (isFinished(short)) {
+                // archive finished
                 batch.set(archRef, {
                     ...fixturePayload,
                     archivedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -233,7 +279,7 @@ async function syncFixturesWindow(token) {
                 }, { merge: true });
                 // remove from live fixtures
                 batch.delete(liveRef);
-                // keep fixture_details (optional). For now we keep it so a user can still open it.
+                // keep fixture_details so a user can still open it
                 batch.set(detailsRef, {
                     fixtureId,
                     startingAtTimestamp: f.starting_at_timestamp,
@@ -248,22 +294,19 @@ async function syncFixturesWindow(token) {
                         name: mapped.away.name,
                         imagePath: mapped.away.image_path ?? null,
                     },
-                    // You can optionally add final score for display
                     score: goals != null
                         ? { homeGoals: goals.homeGoals, awayGoals: goals.awayGoals }
                         : admin.firestore.FieldValue.delete(),
                     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                 }, { merge: true });
-                ops += 3; // archive set + live delete + details upsert
+                ops += 3;
             }
             else {
-                // keep NS-only in fixtures_live (your current rule)
-                if (short && short !== "NS")
-                    continue;
                 // fixtures_live
                 batch.set(liveRef, fixturePayload, { merge: true });
                 ops++;
-                // fixture_details (view doc for details page)
+                written++;
+                // fixture_details
                 batch.set(detailsRef, {
                     fixtureId,
                     startingAtTimestamp: f.starting_at_timestamp,
@@ -290,7 +333,20 @@ async function syncFixturesWindow(token) {
         }
         if (ops > 0)
             await batch.commit();
+        console.log("Fixture filter counts", {
+            page,
+            total,
+            notAllowedLeague,
+            missingParticipants,
+            postponed,
+            finished,
+            nonNS,
+            written,
+        });
         page++;
+        // if API didn’t tell us has_more, stop when we hit an empty page
+        if (hasMoreFromApi == null && fixtures.length === 0)
+            hasMore = false;
     }
     // ✅ PRUNE: delete live fixtures (and their predictions + details) that were previously in this window
     // but are no longer returned by SportMonks (common for postponed/rescheduled fixtures).
@@ -309,9 +365,9 @@ async function syncFixturesWindow(token) {
             if (!seenFixtureIds.has(docSnap.id)) {
                 const predRef = db.collection("predictions_live").doc(docSnap.id);
                 const detailsRef = db.collection("fixture_details").doc(docSnap.id);
-                batch.delete(docSnap.ref); // fixtures_live/{fixtureId}
-                batch.delete(predRef); // predictions_live/{fixtureId}
-                batch.delete(detailsRef); // fixture_details/{fixtureId}
+                batch.delete(docSnap.ref);
+                batch.delete(predRef);
+                batch.delete(detailsRef);
                 pruned++;
                 ops += 3;
                 if (ops >= 450) {

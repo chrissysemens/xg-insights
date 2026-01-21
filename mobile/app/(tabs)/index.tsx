@@ -34,19 +34,22 @@ export default function Home() {
   const c = theme.colours;
 
   const highlights = useHighlightedPredictions();
-  console.log('highlights', JSON.stringify(highlights.data.splice(0,1)));
   const items = highlights.data ?? [];
 
   const clearFavourites = useMemo(() => {
     return items
       .filter((x) => x.prediction.highlightReason === 'CLEAR_FAVOURITE')
-      .sort((a, b) => getResultConf(b.prediction) - getResultConf(a.prediction));
+      .sort(
+        (a, b) => getResultConf(b.prediction) - getResultConf(a.prediction),
+      );
   }, [items]);
 
   const goalHighlights = useMemo(() => {
     return items
       .filter((x) => x.prediction.highlightReason !== 'CLEAR_FAVOURITE')
-      .sort((a, b) => getGoalsScore(b.prediction) - getGoalsScore(a.prediction));
+      .sort(
+        (a, b) => getGoalsScore(b.prediction) - getGoalsScore(a.prediction),
+      );
   }, [items]);
 
   return (
@@ -78,7 +81,9 @@ export default function Home() {
           </View>
 
           {highlights.loading && (
-            <Text style={{ color: c.muted }}>{t('home.loadingHighlights')}</Text>
+            <Text style={{ color: c.muted }}>
+              {t('home.loadingHighlights')}
+            </Text>
           )}
 
           {!!highlights.error && (
@@ -124,7 +129,9 @@ export default function Home() {
             )}
 
             {goalHighlights.length > 0 && (
-              <View style={{ gap: theme.spacing[2], marginTop: theme.spacing[2] }}>
+              <View
+                style={{ gap: theme.spacing[2], marginTop: theme.spacing[2] }}
+              >
                 <Text
                   style={{
                     ...theme.typography.label,

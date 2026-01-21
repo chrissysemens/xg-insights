@@ -47,8 +47,8 @@ const BATCH_SIZE = 50;
 const HIGHLIGHT_TOP_N = 8;
 exports.RESULT_HIGHLIGHT_MIN = 0.52;
 exports.RESULT_GAP_MIN = 0.1;
-exports.OVER25_HIGHLIGHT_MIN = 0.61;
-exports.BTTS_HIGHLIGHT_MIN = 0.54;
+exports.OVER25_HIGHLIGHT_MIN = 0.59;
+exports.BTTS_HIGHLIGHT_MIN = 0.56;
 function pickedResultProb(p) {
     const pick = p.matchResult.pick;
     if (pick === "H")

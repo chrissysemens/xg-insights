@@ -11,8 +11,8 @@ from app.schemas import (
 from app.feature_flatten import build_matrix
 from app.models import ModelBundle
 
-OVER25_THRESHOLD = float(os.getenv("OVER25_THRESHOLD", "0.61"))
-BTTS_THRESHOLD = float(os.getenv("BTTS_THRESHOLD", "0.54"))
+OVER25_THRESHOLD = float(os.getenv("OVER25_THRESHOLD", "0.59"))
+BTTS_THRESHOLD = float(os.getenv("BTTS_THRESHOLD", "0.56"))
 
 app = FastAPI(title="Football Predictor", version="1.0.0")
 

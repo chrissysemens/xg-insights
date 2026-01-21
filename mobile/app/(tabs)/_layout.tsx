@@ -1,57 +1,84 @@
+import React from 'react';
 import { Tabs } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/useTheme';
-import { Header } from '@/components/header/Header';
-import { Text } from '@/components';
 
 export default function TabsLayout() {
   const { theme } = useTheme();
-  const colours = theme.colours;
+  const c = theme.colours;
+  const insets = useSafeAreaInsets();
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
+        tabBarHideOnKeyboard: true,
+
         sceneStyle: {
-          backgroundColor: colours.bg,
+          backgroundColor: c.bg,
         },
+
         tabBarStyle: {
-          backgroundColor: colours.surface,
-          borderTopColor: colours.border,
-          paddingLeft: 0,
-          paddingRight: 0,
+          backgroundColor: c.surface,
+          borderTopColor: c.border,
+          borderTopWidth: 1,
+
+          // ✅ keep it above Android/iOS system bars
+          paddingBottom: Math.max(insets.bottom, 8),
+          paddingTop: 8,
         },
+
         tabBarItemStyle: {
           paddingHorizontal: 0,
         },
 
-        tabBarActiveTintColor: colours.primary,
-        tabBarInactiveTintColor: colours.muted,
+        tabBarActiveTintColor: c.primary,
+        tabBarInactiveTintColor: c.muted,
+
+        tabBarLabelStyle: {
+          fontSize: 12,
+        },
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }) => (
-            <Text style={{ color, fontSize: 16 }}>🏠</Text>
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? 'home' : 'home-outline'}
+              size={size ?? 22}
+              color={color}
+            />
           ),
         }}
       />
+
       <Tabs.Screen
         name="performance"
         options={{
           title: 'Performance',
-          tabBarIcon: ({ color }) => (
-            <Text style={{ color, fontSize: 16 }}>📊</Text>
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? 'stats-chart' : 'stats-chart-outline'}
+              size={size ?? 22}
+              color={color}
+            />
           ),
         }}
       />
+
       <Tabs.Screen
         name="about"
         options={{
           title: 'About',
-          tabBarIcon: ({ color }) => (
-            <Text style={{ color, fontSize: 16 }}>ℹ️</Text>
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? 'document-text' : 'document-text-outline'}
+              size={size ?? 22}
+              color={color}
+            />
           ),
         }}
       />

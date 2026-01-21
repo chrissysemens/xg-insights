@@ -20,11 +20,11 @@ export const ENV = {
   },
 
   FEATURES: {
-    FIXTURE_LOOKAHEAD_DAYS: 5,
+    FIXTURE_LOOKAHEAD_DAYS: 6,
     TEAM_HISTORY_DAYS: 60,
     FORM_MATCH_COUNT: 5,
     XG_MATCH_COUNT: 5,
-    ENRICH_LIMIT: 200, // ✅ add this
+    ENRICH_LIMIT: 500,
   },
 } as const;
 
