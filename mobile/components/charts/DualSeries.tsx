@@ -95,13 +95,13 @@ export const DualSeries = ({
   }, [merged]);
 
   // 3) y domain (defaults to xG-friendly range if not provided)
-    const computedYDomain = useMemo<[number, number]>(() => {
+  const computedYDomain = useMemo<[number, number]>(() => {
     if (yDomain) return yDomain;
 
     const vals: number[] = [];
     for (const d of displayData) {
-        if (typeof d.home === 'number') vals.push(d.home);
-        if (typeof d.away === 'number') vals.push(d.away);
+      if (typeof d.home === 'number') vals.push(d.home);
+      if (typeof d.away === 'number') vals.push(d.away);
     }
     if (!vals.length) return [0, 4];
 
@@ -114,7 +114,7 @@ export const DualSeries = ({
     const niceMax = Math.ceil(padded * 2) / 2;
 
     return [0, Math.max(4, niceMax)];
-    }, [displayData, yDomain]);
+  }, [displayData, yDomain]);
 
   const xTicks = useMemo(() => {
     if (xLabelMode === 'game') return [1, 2, 3, 4, 5];
@@ -261,13 +261,13 @@ export const DualSeries = ({
           }}
         </CartesianChart>
 
-        {/* lightweight labels */}
+        {/* lightweight labels (TOP RIGHT) */}
         <View
           pointerEvents="none"
           style={{
             position: 'absolute',
             right: theme.spacing[2],
-            bottom: theme.spacing[2],
+            top: theme.spacing[2],
             gap: 4,
             backgroundColor: 'rgba(0,0,0,0.15)',
             paddingHorizontal: 6,
@@ -291,7 +291,7 @@ export const DualSeries = ({
               left: theme.spacing[2],
               top: theme.spacing[2],
             }}
-          ></View>
+          />
         ) : null}
       </View>
     </View>

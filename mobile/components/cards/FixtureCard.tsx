@@ -20,7 +20,7 @@ type FixtureCardProps = {
   variant: FixtureCardVariant;
 };
 
-const formatKickoff = (ts: number) => {
+export const formatKickoff = (ts: number) => {
   const d = new Date(ts * 1000);
   const day = d.toLocaleDateString([], {
     weekday: 'short',

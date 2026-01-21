@@ -14,8 +14,8 @@ import { db } from '@/firebase';
 import { useQuery } from '@tanstack/react-query';
 import { Row } from '@/layout/Row';
 import { FixtureDetailsDoc, FormLetter } from '@/types';
-import { friendlyDate } from '@/utils/dates';
 import { DualSeries } from '@/components/charts/DualSeries';
+import { formatKickoff } from '@/components/cards/FixtureCard';
 
 const getFixtureDetails = async (fixtureId: string) => {
   const snap = await getDoc(doc(db, 'fixture_details', fixtureId));
@@ -47,7 +47,7 @@ const buildPredictionChips = (data: FixtureDetailsDoc): PickChip[] => {
   // Only show BTTS if pick is Y
   if (p.btts?.pick === 'Y') chips.push({ key: 'btts', label: 'BTTS' });
 
-  // Only show Over 2.5 if pick is Y (you can swap to show "Under 2.5" if pick is N)
+  // Only show Over 2.5 if pick is Y
   if (p.over25?.pick === 'Y') chips.push({ key: 'o25', label: 'Over 2.5' });
 
   return chips;
@@ -91,7 +91,7 @@ const FormBadge = ({ formLetter }: FormBadgeProps) => {
   return (
     <View
       style={{
-        backgroundColor: backgroundColor,
+        backgroundColor,
         minWidth: 20,
         borderRadius: 4,
         paddingHorizontal: 2,
@@ -105,9 +105,13 @@ const FormBadge = ({ formLetter }: FormBadgeProps) => {
   );
 };
 
+const scoreToResult = (h: number, a: number): 'H' | 'A' | 'D' =>
+  h > a ? 'H' : h < a ? 'A' : 'D';
+
 const FixtureDetails = () => {
   const { fixtureId } = useLocalSearchParams<{ fixtureId: string }>();
   const { theme } = useTheme();
+  const c = theme.colours;
 
   const { data, isFetching } = useQuery<FixtureDetailsDoc | null>({
     queryKey: ['fixtureDetails', fixtureId],
@@ -121,9 +125,7 @@ const FixtureDetails = () => {
         <Header />
         <Screen>
           <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
-            <Text
-              style={{ ...theme.typography.body, color: theme.colours.muted }}
-            >
+            <Text style={{ ...theme.typography.body, color: theme.colours.muted }}>
               Loading…
             </Text>
           </ScrollView>
@@ -142,6 +144,7 @@ const FixtureDetails = () => {
   const chips = buildPredictionChips(data);
   const isHighlighted = !!data.prediction?.highlighted;
 
+  // --- Poisson helpers ---
   const factorial = (n: number): number => {
     let r = 1;
     for (let i = 2; i <= n; i++) r *= i;
@@ -171,15 +174,13 @@ const FixtureDetails = () => {
     return scores.sort((x, y) => y.p - x.p).slice(0, top);
   };
 
-  const computeLambdas = (data: FixtureDetailsDoc) => {
-    const xg = data.xg;
+  const computeLambdas = (d: FixtureDetailsDoc) => {
+    const xg = d.xg;
     if (!xg) return null;
 
-    // Attack/defence blend using the 5-game averages you store
     const lambdaHome = (xg.homeLast5ForAvg + xg.awayLast5AgainstAvg) / 2;
     const lambdaAway = (xg.awayLast5ForAvg + xg.homeLast5AgainstAvg) / 2;
 
-    // tiny home advantage (optional)
     return {
       home: clamp(lambdaHome * 1.05, 0.1, 6),
       away: clamp(lambdaAway, 0.1, 6),
@@ -188,6 +189,39 @@ const FixtureDetails = () => {
 
   const lambdas = computeLambdas(data);
   const likely = lambdas ? topScorelines(lambdas.home, lambdas.away, 5, 5) : [];
+
+  // --- Mismatch warning ---
+  const top = likely[0];
+  const likelyResult = top ? scoreToResult(top.h, top.a) : null;
+  const pick = data.prediction?.matchResult?.pick ?? null;
+
+  const scoreConflictsWithPick =
+    !!pick && !!likelyResult && pick !== likelyResult;
+
+  const WarningChip = ({ label }: { label: string }) => {
+    // if you don't have warningSoft/warning in theme yet, swap to surface2 + text
+    return (
+      <View
+        style={{
+          backgroundColor: (c as any).warningSoft ?? c.surface2,
+          borderRadius: 999,
+          paddingHorizontal: 10,
+          paddingVertical: 4,
+          borderWidth: 1,
+          borderColor: (c as any).warningSoft ?? c.border,
+        }}
+      >
+        <Text
+          style={{
+            ...theme.typography.caption,
+            color: (c as any).warning ?? c.text,
+          }}
+        >
+          {label}
+        </Text>
+      </View>
+    );
+  };
 
   return (
     <AppLayout safe>
@@ -211,7 +245,7 @@ const FixtureDetails = () => {
                   color: theme.colours.muted,
                 }}
               >
-                {`${data.startingAtTimestamp ? friendlyDate(data.startingAtTimestamp) : ''}`}
+                {`${data.startingAtTimestamp ? formatKickoff(data.startingAtTimestamp) : ''}`}
               </Text>
             </View>
           ) : null}
@@ -289,9 +323,7 @@ const FixtureDetails = () => {
                   style={{
                     ...theme.typography.h3,
                     textAlign: 'center',
-                    color: homeIsPick
-                      ? theme.colours.primary
-                      : theme.colours.text,
+                    color: homeIsPick ? theme.colours.primary : theme.colours.text,
                   }}
                 >
                   {data.home.name}
@@ -305,9 +337,7 @@ const FixtureDetails = () => {
                   style={{
                     ...theme.typography.h3,
                     textAlign: 'center',
-                    color: awayIsPick
-                      ? theme.colours.primary
-                      : theme.colours.text,
+                    color: awayIsPick ? theme.colours.primary : theme.colours.text,
                   }}
                 >
                   {data.away.name}
@@ -352,10 +382,10 @@ const FixtureDetails = () => {
                         justifyContent: 'center',
                       }}
                     >
-                      {chips.map((c) => (
+                      {chips.map((chip) => (
                         <PredictionChip
-                          key={c.key}
-                          label={c.label}
+                          key={chip.key}
+                          label={chip.label}
                           highlighted={isHighlighted}
                         />
                       ))}
@@ -380,15 +410,22 @@ const FixtureDetails = () => {
               </Row>
             ) : null}
 
+            {/* poisson + likely scores */}
             {data.xg && lambdas ? (
               <View style={{ marginTop: 30 }}>
-                <Stack gap={12} fullWidth>
+                <Stack gap={5} fullWidth>
                   <PoissonOutlook
                     homeName={data.home.name}
                     awayName={data.away.name}
                     lambdaHome={lambdas.home}
                     lambdaAway={lambdas.away}
                   />
+
+                  {scoreConflictsWithPick ? (
+                    <View style={{ alignItems: 'center', marginTop: 40 }}>
+                      <WarningChip label="Most likely score does not match our pick" />
+                    </View>
+                  ) : null}
 
                   <LikelyScores scores={likely} />
                 </Stack>
@@ -472,13 +509,7 @@ const PoissonOutlook = ({
           <Text style={{ ...theme.typography.caption, color: c.muted }}>
             {homeName}
           </Text>
-          <Text
-            style={{
-              ...theme.typography.h2,
-              color: c.primary,
-              marginTop: 2,
-            }}
-          >
+          <Text style={{ ...theme.typography.h2, color: c.primary, marginTop: 2 }}>
             {lambdaHome.toFixed(2)}
           </Text>
           <Text style={{ ...theme.typography.caption, color: c.muted }}>
@@ -499,9 +530,7 @@ const PoissonOutlook = ({
           <Text style={{ ...theme.typography.caption, color: c.muted }}>
             {awayName}
           </Text>
-          <Text
-            style={{ ...theme.typography.h2, color: c.text2, marginTop: 2 }}
-          >
+          <Text style={{ ...theme.typography.h2, color: c.text2, marginTop: 2 }}>
             {lambdaAway.toFixed(2)}
           </Text>
           <Text style={{ ...theme.typography.caption, color: c.muted }}>

@@ -71,11 +71,12 @@ export default function Home() {
                 ...theme.typography.body,
                 fontFamily: theme.fontFamilies.bold,
                 color: c.text,
+                marginBottom: 10,
               }}
             >
               {t('home.highlightedFixtures')}
             </Text>
-            <Text style={{ ...theme.typography.caption, color: c.muted }}>
+            <Text style={{ ...theme.typography.caption, color: c.muted, marginBottom: 20 }}>
               {t('home.topPicksDescription')}
             </Text>
           </View>
@@ -106,6 +107,7 @@ export default function Home() {
                     ...theme.typography.label,
                     fontFamily: theme.fontFamilies.bold,
                     color: c.text,
+                    marginBottom: 5,
                   }}
                 >
                   {t('home.matchWinners')}

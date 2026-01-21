@@ -1,4 +1,5 @@
 import React from 'react';
+import { ScrollView, View } from 'react-native';
 import { AppLayout } from '@/layout/AppLayout';
 import { Screen } from '@/layout/Screen';
 import { Stack } from '@/layout/Stack';
@@ -14,91 +15,105 @@ export default function AboutScreen() {
     <AppLayout safe>
       <Header />
       <Screen>
-        <Stack
-          gap={4}
-          style={{
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{
             paddingHorizontal: theme.spacing[4],
-            paddingTop: theme.spacing[4],
+            paddingTop: theme.spacing[2],
             paddingBottom: theme.spacing[6],
+            gap: theme.spacing[3],
           }}
         >
-          {/* Title */}
-          <Text
-            style={{
-              ...theme.typography.h2,
-              color: c.text,
-            }}
-          >
-            About xG Insights
-          </Text>
+          {/* Header block */}
+          <View style={{ gap: theme.spacing[1] }}>
+            <Text
+              style={{
+                ...theme.typography.body,
+                fontFamily: theme.fontFamilies.bold,
+                color: c.text,
+              }}
+            >
+              About Football Boost Machine
+            </Text>
+            <Text style={{ ...theme.typography.caption, color: c.muted }}>
+              How the predictions and xG are intended to be used.
+            </Text>
+          </View>
 
-          {/* Intro */}
-          <Text style={{ ...theme.typography.body, color: c.muted }}>
-            Football Boost Machine is an insights app designed to help you
-            explore upcoming football fixtures using data-driven models and
-            expected goals (xG).
-          </Text>
+          {/* Intro card */}
+          <Card>
+            <Text style={{ ...theme.typography.body, color: c.text }}>
+              Football Boost Machine is an insights app designed to help you
+              explore upcoming fixtures using data-driven models and expected
+              goals (xG).
+            </Text>
+            <Text style={{ ...theme.typography.caption, color: c.muted, marginTop: 8 }}>
+              Built independently. Not affiliated with any leagues, clubs, or
+              bookmakers.
+            </Text>
+          </Card>
 
-          {/* Section: How it works */}
-          <Section title="How predictions work">
-            <Text style={{ color: c.muted }}>
+          <SectionCard title="How predictions work">
+            <BodyLine>
               Predictions are generated using statistical models trained on
               historical match data.
-            </Text>
-            <Text style={{ color: c.muted }}>
-              The models estimate probabilities for outcomes such as match
-              winner, goals markets, and both teams to score (BTTS).
-            </Text>
-          </Section>
+            </BodyLine>
+            <BodyLine>
+              The models estimate probabilities for markets like match winner,
+              Over 2.5, and BTTS.
+            </BodyLine>
+            <BodyLine>
+              A “pick” is simply the highest-probability outcome, not a promise.
+            </BodyLine>
+          </SectionCard>
 
-          {/* Section: Highlights */}
-          <Section title="Highlighted fixtures">
-            <Text style={{ color: c.muted }}>
+          <SectionCard title="Highlighted fixtures">
+            <BodyLine>
               Some fixtures are highlighted when the model identifies a clearer
-              edge than usual.
-            </Text>
-            <Text style={{ color: c.muted }}>
-              This does not mean an outcome is guaranteed — only that confidence
-              is higher relative to other matches.
-            </Text>
-          </Section>
+              edge than usual (higher confidence relative to other matches).
+            </BodyLine>
+            <BodyLine>
+              This does not mean the outcome is guaranteed — variance happens.
+            </BodyLine>
+          </SectionCard>
 
-          {/* Section: xG */}
-          <Section title="What is xG?">
-            <Text style={{ color: c.muted }}>
-              Expected goals (xG) estimate the quality of chances created and
+          <SectionCard title="What is xG?">
+            <BodyLine>
+              Expected goals (xG) estimates the quality of chances created and
               conceded.
-            </Text>
-            <Text style={{ color: c.muted }}>
-              Higher xG values suggest better opportunities, not guaranteed
-              goals. Trends over multiple matches are usually more meaningful
-              than single games.
-            </Text>
-          </Section>
+            </BodyLine>
+            <BodyLine>
+              Higher xG suggests better opportunities, not guaranteed goals.
+            </BodyLine>
+            <BodyLine>
+              Trends over multiple matches are usually more meaningful than a
+              single game.
+            </BodyLine>
+          </SectionCard>
 
-          {/* Section: What it is not */}
-          <Section title="What this app is not">
-            <Text style={{ color: c.muted }}>
+          <SectionCard title="What this app is not">
+            <BodyLine>
               Football Boost Machine does not provide betting advice or
               guaranteed predictions.
-            </Text>
-            <Text style={{ color: c.muted }}>
+            </BodyLine>
+            <BodyLine>
               Use these insights as one input alongside your own judgement.
-            </Text>
-          </Section>
+            </BodyLine>
+          </SectionCard>
 
-          {/* Footer note */}
+          {/* Small footer note */}
           <Text
             style={{
               ...theme.typography.caption,
               color: c.muted,
-              marginTop: theme.spacing[4],
+              textAlign: 'center',
+              marginTop: theme.spacing[2],
             }}
           >
-            Built independently. Not affiliated with any leagues, clubs, or
-            bookmakers.
+            Data can be incomplete or delayed. Always sanity-check fixtures and
+            kick-off times.
           </Text>
-        </Stack>
+        </ScrollView>
       </Screen>
     </AppLayout>
   );
@@ -106,7 +121,26 @@ export default function AboutScreen() {
 
 /* ---------------- helpers ---------------- */
 
-function Section({
+function Card({ children }: { children: React.ReactNode }) {
+  const { theme } = useTheme();
+  const c = theme.colours;
+
+  return (
+    <View
+      style={{
+        backgroundColor: c.surface,
+        borderRadius: 16,
+        padding: theme.spacing[3],
+        borderWidth: 1,
+        borderColor: c.border,
+      }}
+    >
+      {children}
+    </View>
+  );
+}
+
+function SectionCard({
   title,
   children,
 }: {
@@ -117,16 +151,30 @@ function Section({
   const c = theme.colours;
 
   return (
-    <Stack gap={2} style={{ marginTop: theme.spacing[2] }}>
+    <Card>
       <Text
         style={{
           ...theme.typography.label,
+          fontFamily: theme.fontFamilies.bold,
           color: c.text,
+          marginBottom: theme.spacing[2],
         }}
       >
         {title}
       </Text>
+
+      <Stack gap={2}>{children}</Stack>
+    </Card>
+  );
+}
+
+function BodyLine({ children }: { children: React.ReactNode }) {
+  const { theme } = useTheme();
+  const c = theme.colours;
+
+  return (
+    <Text style={{ ...theme.typography.body, color: c.muted, lineHeight: 20 }}>
       {children}
-    </Stack>
+    </Text>
   );
 }
