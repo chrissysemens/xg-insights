@@ -25,16 +25,10 @@ export enum HighlightReason {
 const BATCH_SIZE = 50;
 const HIGHLIGHT_TOP_N = 8;
 
-// Keep these aligned with your predictor thresholds (or slightly higher)
-export const RESULT_HIGHLIGHT_MIN = 0.48;
-/**
- * Minimum separation between the top result prob and the 2nd-best prob.
- * Prevents “fake favourites” like H=0.46, D=0.44
- */
+export const RESULT_HIGHLIGHT_MIN = 0.52;
 export const RESULT_GAP_MIN = 0.1;
-
-export const OVER25_HIGHLIGHT_MIN = 0.6;
-export const BTTS_HIGHLIGHT_MIN = 0.6;
+export const OVER25_HIGHLIGHT_MIN = 0.61;
+export const BTTS_HIGHLIGHT_MIN = 0.54;
 
 function pickedResultProb(p: PredictBatchResponse["predictions"][number]) {
   const pick = p.matchResult.pick;

@@ -10,13 +10,6 @@ import { Header } from '@/components/header/Header';
 
 import { useHighlightedPredictions } from '@/hooks/useHighlightedPredictions';
 
-type TeamDoc = {
-  id: number;
-  name: string;
-  shortCode?: string | null;
-  imagePath?: string | null;
-};
-
 const getGoalsScore = (p: any) => {
   // New: single chosen goals badge from backend (never both)
   const gp = p?.goalsPick;
@@ -41,6 +34,7 @@ export default function Home() {
   const c = theme.colours;
 
   const highlights = useHighlightedPredictions();
+  console.log('highlights', JSON.stringify(highlights.data.splice(0,1)));
   const items = highlights.data ?? [];
 
   const clearFavourites = useMemo(() => {

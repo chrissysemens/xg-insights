@@ -114,6 +114,16 @@ export type FixtureDetailsDoc = {
     highlightScore: number;
     highlighted: boolean;
   } | null;
+  xg: {
+    awayLast5Against: number[],
+    awayLast5AgainstAvg: number, 
+    awayLast5For: number[],
+    awayLast5ForAvg: number,
+    homeLast5Against: number[],
+    homeLast5AgainstAvg: number, 
+    homeLast5For: number[],
+    homeLast5ForAvg: number
+  } | null;
 };
 export type Metric = { correct: number; total: number };
 

@@ -6,7 +6,6 @@ import { useTranslation } from 'react-i18next';
 import { router } from 'expo-router';
 
 type Pick = 'H' | 'D' | 'A';
-
 type FixtureCardVariant = 'winner' | 'goals';
 
 type FixtureCardProps = {
@@ -33,14 +32,13 @@ const formatKickoff = (ts: number) => {
 };
 
 const getResultConf = (p: any) =>
-  Math.max(
-    p?.matchResult?.H ?? 0,
-    p?.matchResult?.D ?? 0,
-    p?.matchResult?.A ?? 0,
-  );
+  Math.max(p?.matchResult?.H ?? 0, p?.matchResult?.D ?? 0, p?.matchResult?.A ?? 0);
 
 const roundToNearest25 = (p: number) => Math.round(p / 2.5) * 2.5;
 
+/**
+ * Winner text colour: primary for picked team only (winner variant only).
+ */
 const teamStyle = (which: 'home' | 'away', pick?: Pick, c?: any) => {
   if (!pick || pick === 'D') return { color: c.text };
   if (pick === 'H' && which === 'home') return { color: c.primary };
@@ -57,9 +55,8 @@ const HighlightBadge = ({
   colours: any;
   prediction: any;
 }) => {
-  const meta = highlightMeta(prediction.highlightReason);
+  const meta = highlightMeta(prediction?.highlightReason);
   const chip = chipStyleForTone(meta.tone, c);
-
   const { t } = useTranslation();
 
   return (
@@ -88,17 +85,18 @@ const HighlightBadge = ({
   );
 };
 
-type Props = {
+type TeamsRowProps = {
   theme: any;
   colours: any;
   homeName: string;
   awayName: string;
   homeImage?: string | null;
   awayImage?: string | null;
-  pick?: 'H' | 'D' | 'A';
+  pick?: Pick;
+  winnerColourEnabled?: boolean;
 };
 
-export const TeamsRow: React.FC<Props> = ({
+export const TeamsRow: React.FC<TeamsRowProps> = ({
   theme,
   colours: c,
   homeName,
@@ -106,6 +104,7 @@ export const TeamsRow: React.FC<Props> = ({
   homeImage,
   awayImage,
   pick,
+  winnerColourEnabled = true,
 }) => {
   const isHomePick = pick === 'H';
   const isAwayPick = pick === 'A';
@@ -125,7 +124,7 @@ export const TeamsRow: React.FC<Props> = ({
           flex: 1,
           flexDirection: 'row',
           alignItems: 'center',
-          minWidth: 0,
+          minWidth: 0, // important for ellipsis
         }}
       >
         {!!homeImage && (
@@ -143,10 +142,8 @@ export const TeamsRow: React.FC<Props> = ({
           numberOfLines={1}
           style={{
             ...theme.typography.body,
-            color: c.text,
-            fontFamily: isHomePick
-              ? theme.fontFamilies.bold
-              : theme.fontFamilies.regular,
+            ...(winnerColourEnabled ? teamStyle('home', pick, c) : { color: c.text }),
+            fontFamily: isHomePick ? theme.fontFamilies.bold : theme.fontFamilies.regular,
             flexShrink: 1,
           }}
         >
@@ -154,7 +151,7 @@ export const TeamsRow: React.FC<Props> = ({
         </Text>
       </View>
 
-      {/* VS / spacer */}
+      {/* VS */}
       <Text style={{ ...theme.typography.caption, color: c.muted }}>vs</Text>
 
       {/* AWAY */}
@@ -164,17 +161,15 @@ export const TeamsRow: React.FC<Props> = ({
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'flex-end',
-          minWidth: 0,
+          minWidth: 0, // important for ellipsis
         }}
       >
         <Text
           numberOfLines={1}
           style={{
             ...theme.typography.body,
-            color: c.text,
-            fontFamily: isAwayPick
-              ? theme.fontFamilies.bold
-              : theme.fontFamilies.regular,
+            ...(winnerColourEnabled ? teamStyle('away', pick, c) : { color: c.text }),
+            fontFamily: isAwayPick ? theme.fontFamilies.bold : theme.fontFamilies.regular,
             flexShrink: 1,
             textAlign: 'right',
           }}
@@ -224,6 +219,11 @@ const ConfidenceRow = ({
   );
 };
 
+/**
+ * Single goals chip, based on server-computed `goalsPick`:
+ *  - never shows both BTTS + Over25
+ *  - if both are "Y", server already picked the higher prob
+ */
 const GoalsChips = ({
   theme,
   colours: c,
@@ -234,10 +234,28 @@ const GoalsChips = ({
   prediction: any;
 }) => {
   const { t } = useTranslation();
-  const showOver = prediction.over25?.pick === 'Y';
-  const showBtts = prediction.btts?.pick === 'Y';
 
-  if (!showOver && !showBtts) return null;
+  // 1) Prefer server-computed mutually-exclusive goalsPick
+  const serverGp = prediction?.goalsPick as
+    | { kind: 'btts' | 'over25'; pick: 'Y'; prob: number }
+    | null
+    | undefined;
+
+  // 2) Fallback: compute from raw picks (show even if below highlight mins)
+  const overY = prediction?.over25?.Y ?? 0;
+  const bttsY = prediction?.btts?.Y ?? 0;
+  const overOk = prediction?.over25?.pick === 'Y';
+  const bttsOk = prediction?.btts?.pick === 'Y';
+
+  const fallbackGp =
+    overOk || bttsOk
+      ? overOk && (!bttsOk || overY >= bttsY)
+        ? { kind: 'over25' as const, pick: 'Y' as const, prob: overY }
+        : { kind: 'btts' as const, pick: 'Y' as const, prob: bttsY }
+      : null;
+
+  const gp = serverGp ?? fallbackGp;
+  if (!gp) return null;
 
   const chipStyle = {
     paddingHorizontal: theme.spacing[3],
@@ -257,20 +275,11 @@ const GoalsChips = ({
         flexWrap: 'wrap',
       }}
     >
-      {showOver && (
-        <View style={chipStyle}>
-          <Text style={{ ...theme.typography.caption, color: c.text2 }}>
-            {t('home.over25')}
-          </Text>
-        </View>
-      )}
-      {showBtts && (
-        <View style={chipStyle}>
-          <Text style={{ ...theme.typography.caption, color: c.text2 }}>
-            {t('home.btts')}
-          </Text>
-        </View>
-      )}
+      <View style={chipStyle}>
+        <Text style={{ ...theme.typography.caption, color: c.text2 }}>
+          {gp.kind === 'over25' ? t('home.over25') : t('home.btts')}
+        </Text>
+      </View>
     </View>
   );
 };
@@ -319,15 +328,15 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
         homeImage={homeImage}
         awayImage={awayImage}
         pick={pick}
+        winnerColourEnabled={variant === 'winner'}
       />
 
       {variant === 'winner' && (
         <ConfidenceRow theme={theme} colours={c} prediction={prediction} />
       )}
 
-      {variant === 'goals' && (
-        <GoalsChips theme={theme} colours={c} prediction={prediction} />
-      )}
+      {/* ✅ show goals chip even on winner cards, but only ONE (highest) */}
+      <GoalsChips theme={theme} colours={c} prediction={prediction} />
     </Pressable>
   );
 };

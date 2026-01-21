@@ -18,7 +18,7 @@ gcloud run deploy $SERVICE `
   --platform managed `
   --allow-unauthenticated `
   --port 8080 `
-  --set-env-vars "BTTS_THRESHOLD=0.534,OVER25_THRESHOLD=0.535"
+  --set-env-vars "BTTS_THRESHOLD=0.54,OVER25_THRESHOLD=0.61"
 
 # Show URL
 gcloud run services describe $SERVICE --region $REGION --format="value(status.url)"
