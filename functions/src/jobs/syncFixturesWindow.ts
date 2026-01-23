@@ -295,7 +295,7 @@ export async function syncFixturesWindow(token: string) {
     .get();
 
   let batch = db.batch();
-  let ops = 0;
+  let operations = 0;
   let pruned = 0;
 
   for (const docSnap of liveSnap.docs) {
@@ -308,14 +308,14 @@ export async function syncFixturesWindow(token: string) {
       batch.delete(detailsRef);
 
       pruned++;
-      ops += 3;
+      operations += 3;
 
-      if (ops >= 450) {
+      if (operations >= 450) {
         await batch.commit();
         batch = db.batch();
-        ops = 0;
+        operations = 0;
       }
     }
   }
-  if (ops > 0) await batch.commit();
+  if (operations > 0) await batch.commit();
 }
