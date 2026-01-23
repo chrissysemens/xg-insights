@@ -1,53 +1,19 @@
-// functions/src/features/teamStats.ts
 import { ENV } from "../config";
 import { fixturesBetweenByTeam, fetchJSON } from "../sportmonks/client";
 import { getFinalScore } from "../sportmonks/parsers";
+import { FormLetter } from "../types";
+import {
+  extractTeamAndOppXg,
+  getXgFixtureArray,
+  weightedAvg,
+} from "../utils/helpers";
 import { avg, safeDivide } from "../utils/math";
 
-type FormLetter = "W" | "D" | "L";
-
-function weightedAvg(values: number[], weights: number[]) {
-  if (!values.length) return null;
-  const w = weights.slice(0, values.length);
-  const denom = w.reduce((a, b) => a + b, 0);
-  if (!denom) return null;
-  const num = values.reduce((sum, v, i) => sum + v * (w[i] ?? 0), 0);
-  return num / denom;
-}
-
-// newest -> oldest (same direction as `finished` after sorting desc)
+// Weighted averages (Most recent matches have higher weight)
 const W5 = [1.0, 0.85, 0.7, 0.55, 0.4];
 const W10 = [1.0, 0.9, 0.82, 0.74, 0.66, 0.58, 0.5, 0.42, 0.34, 0.26];
 
-// SportMonks can return xG include under different casing depending on client
-function getXgFixtureArray(fx: any): any[] {
-  const a = fx?.xgfixture;
-  if (Array.isArray(a)) return a;
-  const b = fx?.xgFixture;
-  if (Array.isArray(b)) return b;
-  return [];
-}
-
-function extractTeamAndOppXg(
-  xgArr: any[],
-  teamId: number,
-): { teamXg: number | null; oppXg: number | null } {
-  if (!Array.isArray(xgArr) || xgArr.length < 2)
-    return { teamXg: null, oppXg: null };
-
-  const teamObj = xgArr.find((x: any) => x?.participant_id === teamId);
-  const oppObj = xgArr.find((x: any) => x?.participant_id !== teamId);
-
-  const teamXg = teamObj?.data?.value;
-  const oppXg = oppObj?.data?.value;
-
-  return {
-    teamXg: typeof teamXg === "number" ? teamXg : null,
-    oppXg: typeof oppXg === "number" ? oppXg : null,
-  };
-}
-
-export async function computeTeamStats(teamId: number, token: string) {
+export const computeTeamStats = async (teamId: number, token: string) => {
   const today = new Date();
   const from = new Date();
   from.setDate(today.getDate() - ENV.FEATURES.TEAM_HISTORY_DAYS);
@@ -84,7 +50,7 @@ export async function computeTeamStats(teamId: number, token: string) {
         new Date(a.starting_at ?? a.startingAt ?? 0).getTime(),
     );
 
-  // --- Rest days ---
+  // Calculate teams rest days since last match
   const lastFinished = finished[0];
   const lastKickoff = lastFinished
     ? new Date(
@@ -100,7 +66,7 @@ export async function computeTeamStats(teamId: number, token: string) {
         )
       : null;
 
-  function computeLastNResults(n: number): FormLetter[] {
+  const computeLastNResults = (n: number): FormLetter[] => {
     const matches = finished.slice(0, n);
     const out: FormLetter[] = [];
 
@@ -122,9 +88,11 @@ export async function computeTeamStats(teamId: number, token: string) {
     }
 
     return out;
-  }
+  };
 
-  function computeLastNXg(n: number): { xgFor: number[]; xgAgainst: number[] } {
+  const computeLastNXg = (
+    n: number,
+  ): { xgFor: number[]; xgAgainst: number[] } => {
     const outFor: number[] = [];
     const outAgainst: number[] = [];
 
@@ -142,9 +110,9 @@ export async function computeTeamStats(teamId: number, token: string) {
     }
 
     return { xgFor: outFor, xgAgainst: outAgainst };
-  }
+  };
 
-  function computeFormN(n: number) {
+  const computeFormN = (n: number) => {
     const slice = finished.slice(0, n);
 
     let wins = 0;
@@ -216,7 +184,7 @@ export async function computeTeamStats(teamId: number, token: string) {
       goalsAgainstWAvg: gaW,
       pointsWAvg: ptsW,
     };
-  }
+  };
 
   function computeXgN(n: number) {
     const slice = finished
@@ -341,4 +309,4 @@ export async function computeTeamStats(teamId: number, token: string) {
     xgLast5ForAvg: avg(xgLast5.xgFor),
     xgLast5AgainstAvg: avg(xgLast5.xgAgainst),
   };
-}
+};

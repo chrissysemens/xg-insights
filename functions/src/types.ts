@@ -23,6 +23,8 @@ export type Fixture = {
   };
 };
 
+export type FormLetter = "W" | "D" | "L";
+
 export enum HighlightReason {
   HIGH_GOALS = "HIGH_GOALS",
   BTTS_LIKELY = "BTTS_LIKELY",

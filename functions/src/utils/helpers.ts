@@ -409,6 +409,31 @@ export const extractHomeAway = (participants: Participant[]) => {
   };
 };
 
+/**
+ * Extracts team and opponent xG values from an xG array.
+ * @param xgArr - xG array
+ * @param teamId -  Team ID
+ * @returns - Object with teamXg and oppXg values, or null if not found
+ */
+export const extractTeamAndOppXg = (
+  xgArr: any[],
+  teamId: number,
+): { teamXg: number | null; oppXg: number | null } => {
+  if (!Array.isArray(xgArr) || xgArr.length < 2)
+    return { teamXg: null, oppXg: null };
+
+  const teamObj = xgArr.find((x: any) => x?.participant_id === teamId);
+  const oppObj = xgArr.find((x: any) => x?.participant_id !== teamId);
+
+  const teamXg = teamObj?.data?.value;
+  const oppXg = oppObj?.data?.value;
+
+  return {
+    teamXg: typeof teamXg === "number" ? teamXg : null,
+    oppXg: typeof oppXg === "number" ? oppXg : null,
+  };
+}
+
 
 /**
  * Returns head-to-head fixtures between two teams.
@@ -493,6 +518,19 @@ export const getPagination = (json: any): Pagination | null => {
 };
 
 /**
+ * Retrieves the xG fixture array from a fixture object, handling different casing.
+ * @param {*} fx - Fixture object
+ * @return {*}  {any[]}
+ */
+export const getXgFixtureArray = (fx: any): any[] => {
+  const a = fx?.xgfixture;
+  if (Array.isArray(a)) return a;
+  const b = fx?.xgFixture;
+  if (Array.isArray(b)) return b;
+  return [];
+}
+
+/**
  * Checks if a fixture is in a finished state based on its short name.
  * @param shortName - Short name of the fixture state
  * @returns - True if the fixture is finished, false otherwise
@@ -538,4 +576,19 @@ export const resultGap = (p: PredictBatchResponse["predictions"][number]) => {
   const best = probs[0] ?? 0;
   const second = probs[1] ?? 0;
   return Math.max(0, best - second);
+}
+
+/**
+ * Calculates the weighted average of given values and weights.
+ * @param values - Array of numbers
+ * @param weights - Array of weights
+ * @returns - Weighted average or null if values array is empty or weights sum to zero
+ */
+export const weightedAvg = (values: number[], weights: number[]) => {
+  if (!values.length) return null;
+  const w = weights.slice(0, values.length);
+  const denom = w.reduce((a, b) => a + b, 0);
+  if (!denom) return null;
+  const num = values.reduce((sum, v, i) => sum + v * (w[i] ?? 0), 0);
+  return num / denom;
 }
