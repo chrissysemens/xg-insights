@@ -1,3 +1,10 @@
+
+export type FetchJSONOptions = {
+  timeoutMs?: number;
+  retries?: number;
+  retryDelayBaseMs?: number;
+};
+
 export type Fixture = {
   id: number;
   league_id: number;

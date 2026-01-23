@@ -1,13 +1,7 @@
-// functions/src/sportmonks/client.ts
 import { setTimeout as sleep } from "node:timers/promises";
+import { FetchJSONOptions } from "../types";
 
-type FetchJSONOptions = {
-  timeoutMs?: number;
-  retries?: number;
-  retryDelayBaseMs?: number;
-};
-
-function withTimeout(signal: AbortSignal, timeoutMs: number) {
+const withTimeout = (signal: AbortSignal, timeoutMs: number) => {
   const controller = new AbortController();
   const onAbort = () => controller.abort();
   signal.addEventListener("abort", onAbort);
@@ -21,19 +15,19 @@ function withTimeout(signal: AbortSignal, timeoutMs: number) {
       signal.removeEventListener("abort", onAbort);
     },
   };
-}
+};
 
-function isRetryableStatus(status: number) {
+const isRetryableStatus = (status: number) => {
   return status === 408 || status === 429 || (status >= 500 && status <= 599);
-}
+};
 
-function jitter(ms: number) {
+const jitter = (ms: number) => {
   // +/- 20%
   const delta = ms * 0.2;
   return ms + (Math.random() * 2 - 1) * delta;
-}
+};
 
-export async function fetchJSON(url: string, opts: FetchJSONOptions = {}) {
+export const fetchJSON = async (url: string, opts: FetchJSONOptions = {}) => {
   const timeoutMs = opts.timeoutMs ?? 25_000;
   const retries = opts.retries ?? 5;
   const retryDelayBaseMs = opts.retryDelayBaseMs ?? 750;
@@ -87,15 +81,15 @@ export async function fetchJSON(url: string, opts: FetchJSONOptions = {}) {
   }
 
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
-}
+};
 
-export function fixturesBetweenByTeam(
+export const fixturesBetweenByTeam = (
   teamId: number,
   from: string,
   to: string,
   token: string,
-  base: string
-) {
+  base: string,
+) => {
   return (
     `${base}/fixtures/between/${from}/${to}/${teamId}` +
     `?api_token=${encodeURIComponent(token)}` +
