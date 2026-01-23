@@ -1,107 +1,21 @@
 import * as admin from "firebase-admin";
 import { ENV } from "../config";
-
-type PredictBatchRequest = {
-  modelVersion: string;
-  items: Array<{ fixtureId: string; features: any }>;
-};
-
-type PredictBatchResponse = {
-  modelVersion: string;
-  predictions: Array<{
-    fixtureId: string;
-    matchResult: { H: number; D: number; A: number; pick: "H" | "D" | "A" };
-    over25?: { Y: number; N: number; pick: "Y" | "N" };
-    btts?: { Y: number; N: number; pick: "Y" | "N" };
-  }>;
-};
-
-export enum HighlightReason {
-  HIGH_GOALS = "HIGH_GOALS",
-  BTTS_LIKELY = "BTTS_LIKELY",
-  CLEAR_FAVOURITE = "CLEAR_FAVOURITE",
-}
+import {
+  PredictBatchRequest,
+  PredictBatchResponse,
+} from "../types";
+import { chunk, computeHighlightMeta, pickedResultProb, resultGap } from "../utils/helpers";
+import {
+  BTTS_HIGHLIGHT_MIN,
+  OVER25_HIGHLIGHT_MIN,
+  RESULT_GAP_MIN,
+  RESULT_HIGHLIGHT_MIN,
+} from "../consts";
 
 const BATCH_SIZE = 50;
 const HIGHLIGHT_TOP_N = 8;
 
-export const RESULT_HIGHLIGHT_MIN = 0.52;
-export const RESULT_GAP_MIN = 0.1;
-export const OVER25_HIGHLIGHT_MIN = 0.59;
-export const BTTS_HIGHLIGHT_MIN = 0.56;
-
-function pickedResultProb(p: PredictBatchResponse["predictions"][number]) {
-  const pick = p.matchResult.pick;
-  if (pick === "H") return p.matchResult.H ?? 0;
-  if (pick === "D") return p.matchResult.D ?? 0;
-  return p.matchResult.A ?? 0;
-}
-
-/**
- * How “clear” the favourite is:
- * gap = bestProb - secondBestProb
- */
-function resultGap(p: PredictBatchResponse["predictions"][number]) {
-  const H = Number(p.matchResult.H ?? 0);
-  const D = Number(p.matchResult.D ?? 0);
-  const A = Number(p.matchResult.A ?? 0);
-
-  const probs = [H, D, A].sort((a, b) => b - a);
-  const best = probs[0] ?? 0;
-  const second = probs[1] ?? 0;
-  return Math.max(0, best - second);
-}
-
-function computeHighlightMeta(p: PredictBatchResponse["predictions"][number]) {
-  const candidates: Array<{ reason: HighlightReason; score: number }> = [];
-
-  // --- mutually exclusive goal-type highlight (BTTS vs Over2.5) ---
-  const bttsY = p.btts?.Y ?? 0;
-  const overY = p.over25?.Y ?? 0;
-
-  const bttsOk = p.btts?.pick === "Y" && bttsY >= BTTS_HIGHLIGHT_MIN;
-  const overOk = p.over25?.pick === "Y" && overY >= OVER25_HIGHLIGHT_MIN;
-
-  if (bttsOk || overOk) {
-    // choose the stronger "Y" by probability
-    if (overOk && (!bttsOk || overY >= bttsY)) {
-      candidates.push({ reason: HighlightReason.HIGH_GOALS, score: overY });
-    } else if (bttsOk) {
-      candidates.push({ reason: HighlightReason.BTTS_LIKELY, score: bttsY });
-    }
-  }
-
-  // Favourite highlight: must pass MIN and be clearly separated by GAP
-  const fav = pickedResultProb(p);
-  const gap = resultGap(p);
-
-  if (fav >= RESULT_HIGHLIGHT_MIN && gap >= RESULT_GAP_MIN) {
-    candidates.push({ reason: HighlightReason.CLEAR_FAVOURITE, score: fav });
-  }
-
-  // Fallback: always return something for sorting/scoring, even if unqualified
-  if (candidates.length === 0) {
-    return {
-      highlightScore: fav,
-      highlightReason: HighlightReason.CLEAR_FAVOURITE,
-    };
-  }
-
-  candidates.sort((a, b) => b.score - a.score);
-  return {
-    highlightScore: candidates[0].score,
-    highlightReason: candidates[0].reason,
-  };
-}
-
-function chunk<T>(arr: T[], size: number): T[][] {
-  if (size <= 0) return [arr];
-  const out: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
-}
-
-export async function runPredictionsWindow() {
+export const runPredictionsWindow = async () => {
   if (!ENV.PREDICTOR.BASE_URL) {
     throw new Error("Missing ENV.PREDICTOR.BASE_URL");
   }
@@ -120,17 +34,7 @@ export async function runPredictionsWindow() {
 
   const fixtures = qs.docs.map((d) => ({ docId: d.id, ...(d.data() as any) }));
 
-  // TEMP migration fallback: prefer `features`, fallback `featuresV2`
   const hasFeatures = (f: any) => !!(f.features ?? f.featuresV2);
-
-  const total = fixtures.length;
-  const withFeatures = fixtures.filter(hasFeatures).length;
-
-  console.log(
-    `Prediction scope: total=${total}, withFeatures=${withFeatures}, missingFeatures=${
-      total - withFeatures
-    }`,
-  );
 
   const candidates = fixtures
     .map((f) => ({
@@ -139,18 +43,15 @@ export async function runPredictionsWindow() {
     }))
     .filter((x) => !!x.features);
 
-  console.log(`Prediction candidates: ${candidates.length}`);
   if (candidates.length === 0) {
-    console.warn(
-      "runPredictionsWindow: no candidates (likely enrichment not run)",
-    );
+    // No work to do
     return;
   }
 
   const baseUrl = ENV.PREDICTOR.BASE_URL.replace(/\/+$/, "");
   const url = `${baseUrl}/predictBatch`;
 
-  // --- 1) Run prediction batches & write predictions_live AND merge into fixture_details ---
+  // Run predictions in batches
   for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
     const slice = candidates.slice(i, i + BATCH_SIZE);
 
@@ -176,7 +77,7 @@ export async function runPredictionsWindow() {
 
     const json = (await res.json()) as PredictBatchResponse;
 
-    let batch = db.batch();
+    let writeBatch = db.batch();
     let ops = 0;
 
     for (const p of json.predictions) {
@@ -187,7 +88,7 @@ export async function runPredictionsWindow() {
 
       const meta = computeHighlightMeta(p);
 
-      // --- compute a single goals badge (never both) ---
+      // Compute highlight flags:  ClearWinner and (BTTS OR Over2.5)
       const bttsY = p.btts?.Y ?? 0;
       const overY = p.over25?.Y ?? 0;
 
@@ -205,12 +106,12 @@ export async function runPredictionsWindow() {
             : { kind: "btts", pick: "Y", prob: bttsY }
           : null;
 
-      // Favourite qualifies only if MIN + GAP are met
+      // Clear favourite if MIN + GAP are met
       const fav = pickedResultProb(p);
       const gap = resultGap(p);
       const favQualified = fav >= RESULT_HIGHLIGHT_MIN && gap >= RESULT_GAP_MIN;
 
-      // Qualified if a goals badge qualifies OR a genuinely clear favourite qualifies
+      // Qualified: If a goals badge qualifies OR a genuinely clear favourite qualifies
       const qualified = favQualified || !!goalsPick;
 
       const predictionBlock = {
@@ -218,21 +119,17 @@ export async function runPredictionsWindow() {
         matchResult: p.matchResult,
         over25: p.over25 ?? null,
         btts: p.btts ?? null,
-
-        qualified, // ✅ UI can filter by this
-        goalsPick, // ✅ UI should use this to show ONLY one goals badge
-
-        // useful for debugging/UI tooltips if you want later
+        qualified, // For UI filtering
+        goalsPick, // UI badge info
         resultGap: gap,
-
         highlightScore: meta.highlightScore,
         highlightReason: meta.highlightReason,
         highlighted: false, // updated later
         generatedAt: admin.firestore.FieldValue.serverTimestamp(),
       };
 
-      // predictions_live (raw)
-      batch.set(
+      // Write into predictions_live (raw data)
+      writeBatch.set(
         predRef,
         {
           fixtureId,
@@ -242,8 +139,8 @@ export async function runPredictionsWindow() {
       );
       ops++;
 
-      // fixture_details (denormalised for UI)
-      batch.set(
+      // Also write into fixture_details (denormalised for UI)
+      writeBatch.set(
         detailsRef,
         {
           fixtureId,
@@ -255,20 +152,16 @@ export async function runPredictionsWindow() {
       ops++;
 
       if (ops >= 450) {
-        await batch.commit();
-        batch = db.batch();
+        await writeBatch.commit();
+        writeBatch = db.batch();
         ops = 0;
       }
     }
 
-    if (ops > 0) await batch.commit();
-
-    console.log(
-      `Wrote predictions for batch ${Math.floor(i / BATCH_SIZE) + 1} (${slice.length} fixtures)`,
-    );
+    if (ops > 0) await writeBatch.commit();
   }
 
-  // --- 2) Select top N highlights and update highlighted flags in BOTH places ---
+  // Select top N highlights and update highlighted flags in BOTH places ---
   const fixtureIdsInScope = fixtures
     .filter(hasFeatures)
     .map((f) => String(f.id ?? f.docId));
@@ -293,44 +186,39 @@ export async function runPredictionsWindow() {
         qualified: Boolean(data.qualified),
       };
     })
-    .filter((x) => x.qualified) // ✅ this is the key change
+    .filter((x) => x.qualified)
     .sort((a, b) => b.score - a.score);
 
   const top = new Set(scored.slice(0, HIGHLIGHT_TOP_N).map((x) => x.fixtureId));
 
-  let batch2 = db.batch();
-  let ops2 = 0;
+  let highlightBatch = db.batch();
+  let operations = 0;
 
-  // We still need to write highlighted=false for non-top docs in scope,
-  // including non-qualified docs (so UI doesn't keep stale highlights)
+  // Write highlighted false for all other docs
   const allInScope = predDocs.map((d) => ({ ref: d.ref, fixtureId: d.id }));
 
   for (const s of allInScope) {
     const isHighlighted = top.has(s.fixtureId);
 
     // predictions_live
-    batch2.set(s.ref, { highlighted: isHighlighted }, { merge: true });
-    ops2++;
+    highlightBatch.set(s.ref, { highlighted: isHighlighted }, { merge: true });
+    operations++;
 
     // fixture_details mirror flag
     const detailsRef = db.collection("fixture_details").doc(s.fixtureId);
-    batch2.set(
+    highlightBatch.set(
       detailsRef,
       { prediction: { highlighted: isHighlighted } },
       { merge: true },
     );
-    ops2++;
+    operations++;
 
-    if (ops2 >= 450) {
-      await batch2.commit();
-      batch2 = db.batch();
-      ops2 = 0;
+    if (operations >= 450) {
+      await highlightBatch.commit();
+      highlightBatch = db.batch();
+      operations = 0;
     }
   }
 
-  if (ops2 > 0) await batch2.commit();
-
-  console.log(
-    `Prediction run complete. Highlighted ${top.size} fixtures (top ${HIGHLIGHT_TOP_N}).`,
-  );
+  if (operations > 0) await highlightBatch.commit();
 }

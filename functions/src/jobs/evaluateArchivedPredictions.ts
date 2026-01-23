@@ -1,69 +1,19 @@
 import * as admin from "firebase-admin";
-
-type Pick = "Y" | "N";
-type ResultPick = "H" | "D" | "A";
-
-function actualResult(hg: number, ag: number): ResultPick {
-  if (hg > ag) return "H";
-  if (hg < ag) return "A";
-  return "D";
-}
-function actualBTTS(hg: number, ag: number): Pick {
-  return hg > 0 && ag > 0 ? "Y" : "N";
-}
-function actualOver25(hg: number, ag: number): Pick {
-  return hg + ag >= 3 ? "Y" : "N";
-}
+import { Pick, ResultPick } from "../types";
+import {
+  actualBTTS,
+  actualOver25,
+  actualResult,
+  extractFinalScoreFromFixture,
+} from "../utils/helpers";
 
 /**
- * Adjust this once you confirm where your archived fixture stores the final score.
- * I’ve included a few common patterns.
+ * Writes evaluation data for finished fixtures (measure accuracy).
+ * @return {*} - void
  */
-function extractFinalScore(fx: any): { hg: number; ag: number } | null {
-  // Pattern A: direct
-  if (fx.homeGoals != null && fx.awayGoals != null) {
-    return { hg: Number(fx.homeGoals), ag: Number(fx.awayGoals) };
-  }
-
-  // Pattern B: nested "scores"
-  if (fx.scores?.home != null && fx.scores?.away != null) {
-    return { hg: Number(fx.scores.home), ag: Number(fx.scores.away) };
-  }
-
-  // Pattern C: SportsMonks-ish shapes vary by endpoint
-  if (
-    fx.scores?.localteam_score != null &&
-    fx.scores?.visitorteam_score != null
-  ) {
-    return {
-      hg: Number(fx.scores.localteam_score),
-      ag: Number(fx.scores.visitorteam_score),
-    };
-  }
-
-  if (Array.isArray(fx.scores)) {
-    const s = fx.scores.find(
-      (x: any) =>
-        x?.description === "CURRENT" ||
-        x?.description === "FT" ||
-        x?.description === "AET",
-    );
-    const home = s?.score?.home;
-    const away = s?.score?.away;
-    if (typeof home === "number" && typeof away === "number") {
-      return { hg: home, ag: away };
-    }
-  }
-
-  return null;
-}
-
 export async function evaluateArchivedPredictionsWindow() {
   const db = admin.firestore();
 
-  // Prefer denormalised fields for easy querying:
-  // - stateShortName: "FT"
-  // - evaluationDone: false
   const snap = await db
     .collection("fixtures_archive")
     .where("stateShortName", "==", "FT")
@@ -72,7 +22,7 @@ export async function evaluateArchivedPredictionsWindow() {
     .get();
 
   if (snap.empty) {
-    console.log("evaluateArchivedPredictions: nothing to do");
+    // No work to do
     return;
   }
 
@@ -90,14 +40,14 @@ export async function evaluateArchivedPredictionsWindow() {
   });
 
   let batch = db.batch();
-  let ops = 0;
+  let operations = 0;
 
   for (const fxDoc of snap.docs) {
     const fx = fxDoc.data() as any;
     const fixtureId = fxDoc.id;
 
     const pred = predsById.get(fixtureId);
-    const score = extractFinalScore(fx);
+    const score = extractFinalScoreFromFixture(fx);
 
     // If we can’t evaluate, record why (and allow retry later)
     if (!score) {
@@ -105,7 +55,7 @@ export async function evaluateArchivedPredictionsWindow() {
         evaluationLastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
         evaluationError: "MISSING_FINAL_SCORE",
       });
-      ops++;
+      operations++;
       continue;
     }
 
@@ -114,7 +64,7 @@ export async function evaluateArchivedPredictionsWindow() {
         evaluationLastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
         evaluationError: "MISSING_PREDICTION_DOC",
       });
-      ops++;
+      operations++;
       continue;
     }
 
@@ -163,17 +113,15 @@ export async function evaluateArchivedPredictionsWindow() {
       },
     });
 
-    ops++;
+    operations++;
 
     // Firestore batch limit is 500 writes, keep margin
-    if (ops >= 450) {
+    if (operations >= 450) {
       await batch.commit();
       batch = db.batch();
-      ops = 0;
+      operations = 0;
     }
   }
 
-  if (ops > 0) await batch.commit();
-
-  console.log(`evaluateArchivedPredictions: processed ${snap.size} fixtures`);
+  if (operations > 0) await batch.commit();
 }
