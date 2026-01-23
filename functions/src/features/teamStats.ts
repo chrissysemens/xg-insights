@@ -1,9 +1,9 @@
 import { ENV } from "../config";
 import { fixturesBetweenByTeam, fetchJSON } from "../sportmonks/client";
-import { getFinalScore } from "../sportmonks/parsers";
 import { FormLetter } from "../types";
 import {
   extractTeamAndOppXg,
+  getFinalScore,
   getXgFixtureArray,
   weightedAvg,
 } from "../utils/helpers";

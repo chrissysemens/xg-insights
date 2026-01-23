@@ -9,14 +9,14 @@ export function avg(nums: number[]) {
 }
 
 /**
- * Returns the result of dividing a by b, or 0 if b is zero.
- * @param a - number
- * @param b - number
- * @returns - Division result or 0 if divisor is zero
+ * Converts decimal odds to implied probability.
+ * @param d - decimal odds number or null
+ * @returns - number | null
  */
-export function safeDivide(a: number, b: number) {
-  return b === 0 ? 0 : a / b;
+export const impliedFromDecimal = (d: number | null) => {
+  return d && d > 0 ? 1 / d : null;
 }
+
 
 /**
  * Rerturns a number if the input can be converted to a finite number, otherwise returns null.
@@ -28,3 +28,23 @@ export const numOrNull = (v: unknown): number | null => {
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 };
+
+/**
+ * Returns the result of dividing a by b, or 0 if b is zero.
+ * @param a - number
+ * @param b - number
+ * @returns - Division result or 0 if divisor is zero
+ */
+export function safeDivide(a: number, b: number) {
+  return b === 0 ? 0 : a / b;
+}
+
+/**
+ * Converts input to a decimal odds number if valid, otherwise returns null.
+ * @param n  - unknown
+ * @returns - number | null
+ */
+export const toDecimal = (n: unknown): number | null => {
+  const v = typeof n === "string" ? Number(n) : typeof n === "number" ? n : NaN;
+  return Number.isFinite(v) && v > 1.0 ? v : null;
+}

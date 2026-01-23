@@ -1,9 +1,9 @@
 import * as admin from "firebase-admin";
-import { extractCurrentGoals } from "../sportmonks/extractGoals";
 import { ENV } from "../config";
 import { addDaysUTC, formatDateUTC } from "../utils/date";
 import { Fixture } from "../types";
 import {
+  extractCurrentGoals,
   extractHomeAway,
   getPagination,
   isFinished,

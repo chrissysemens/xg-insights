@@ -3,6 +3,7 @@ import { BTTS_HIGHLIGHT_MIN, FINISHED_STATES, OVER25_HIGHLIGHT_MIN, RESULT_GAP_M
 import { fetchJSON, fixturesBetweenByTeam } from "../sportmonks/client";
 import {
   Fixture,
+  Goals,
   HighlightReason,
   Pagination,
   Participant,
@@ -389,6 +390,48 @@ export function extractFinalScoreFromScoresArray(
     : null;
 }
 
+
+/**
+ * Extracts current goals from fixture data.
+ * @param fx - fixture object
+ * @returns - Goals | null
+ */
+export const extractCurrentGoals = (fx: any): Goals | null => {
+  const parts: any[] = fx?.participants ?? [];
+  const home = parts.find((p) => p?.meta?.location === "home");
+  const away = parts.find((p) => p?.meta?.location === "away");
+  if (!home?.id || !away?.id) return null;
+
+  const homeId = Number(home.id);
+  const awayId = Number(away.id);
+
+  const scores: any[] = fx?.scores ?? [];
+  if (!Array.isArray(scores) || scores.length === 0) return null;
+
+  const rows = pickScoreRows(scores);
+  if (rows.length === 0) return null;
+
+  let homeGoals: number | null = null;
+  let awayGoals: number | null = null;
+
+  for (const s of rows) {
+    const pidRaw = s?.participant_id;
+    const goalsRaw = s?.score?.goals;
+
+    if (pidRaw == null || goalsRaw == null) continue;
+
+    const pid = Number(pidRaw);
+    const goals = Number(goalsRaw);
+
+    if (pid === homeId) homeGoals = goals;
+    if (pid === awayId) awayGoals = goals;
+  }
+
+  if (homeGoals == null || awayGoals == null) return null;
+  return { homeGoals, awayGoals };
+}
+
+
 /**
  * Extracts home and away participants and positions.
  * @param participants - Participant array
@@ -408,6 +451,17 @@ export const extractHomeAway = (participants: Participant[]) => {
     awayPosition: away.meta?.position ?? null,
   };
 };
+
+/**
+ * Extracts home and away team IDs from a fixture object.
+ * @param fixture - Fixture object
+ * @returns - Object containing homeTeamId and awayTeamId
+ */
+export const extractTeamIds = (fixture: any) => {
+  const homeTeamId = fixture.participants?.find((p: any) => p.meta?.location === "home")?.id;
+  const awayTeamId = fixture.participants?.find((p: any) => p.meta?.location === "away")?.id;
+  return { homeTeamId, awayTeamId };
+}
 
 /**
  * Extracts team and opponent xG values from an xG array.
@@ -433,6 +487,7 @@ export const extractTeamAndOppXg = (
     oppXg: typeof oppXg === "number" ? oppXg : null,
   };
 }
+
 
 
 /**
@@ -505,6 +560,18 @@ export const fetchH2H = async(
 }
 
 /**
+ * Gets the final score from an array of score objects.
+ * @param scores 
+ * @returns - An object with home and away scores, or null if not found
+ */
+export const getFinalScore = (scores: any[]) => {
+  const home = scores.find(s => s.description === "CURRENT" && s.score.participant === "home")?.score.goals;
+  const away = scores.find(s => s.description === "CURRENT" && s.score.participant === "away")?.score.goals;
+  if (typeof home !== "number" || typeof away !== "number") return null;
+  return { home, away };
+}
+
+/**
  * Get pagination info from API response.
  * SportMonks responses can vary by endpoint/version,
  * some use json.pagination, some use json.meta.pagination
@@ -539,6 +606,82 @@ export const isFinished = (shortName?: string) => {
   if (!shortName) return false;
   return FINISHED_STATES.has(shortName);
 };
+
+import { OddsSnapshot } from "../types";
+import { impliedFromDecimal, toDecimal } from "../utils/math";
+
+/**
+ * Normalises 1X2 odds from various formats into a standard structure.
+ * @param odds - unknown[] | undefined | null
+ * @returns - OddsSnapshot | null
+ */
+export const  normalise1x2Odds = (
+  odds: unknown[] | undefined | null,
+): OddsSnapshot | null => {
+  if (!Array.isArray(odds) || odds.length === 0) return null;
+
+  let home: number | null = null;
+  let draw: number | null = null;
+  let away: number | null = null;
+
+  for (const o of odds) {
+    const obj: any = o;
+
+    const label = String(
+      obj?.label ??
+        obj?.name ??
+        obj?.market_description ??
+        obj?.type ??
+        obj?.outcome ??
+        "",
+    )
+      .toLowerCase()
+      .trim();
+
+    const value =
+      toDecimal(obj?.value) ??
+      toDecimal(obj?.odd) ??
+      toDecimal(obj?.odds) ??
+      null;
+
+    if (!value) continue;
+
+    if (label === "1" || label.includes("home")) home = Math.max(home ?? 0, value);
+    else if (label === "x" || label.includes("draw")) draw = Math.max(draw ?? 0, value);
+    else if (label === "2" || label.includes("away")) away = Math.max(away ?? 0, value);
+  }
+
+  if (home == null && draw == null && away == null) return null;
+
+  return {
+    market: "1x2",
+    decimal: { home, draw, away },
+    implied: {
+      home: impliedFromDecimal(home),
+      draw: impliedFromDecimal(draw),
+      away: impliedFromDecimal(away),
+    },
+  };
+}
+
+/**
+ * Picks score rows from scores array, prioritizing "CURRENT" then "FT".
+ * @param scores - any[]
+ * @returns - any[]
+ */
+export const pickScoreRows = (scores: any[]): any[] => {
+  const byDesc = (d: string) =>
+    scores.filter((s) => String(s?.description ?? "").toUpperCase() === d);
+
+  const current = byDesc("CURRENT");
+  if (current.length) return current;
+
+  const ft = byDesc("FT");
+  if (ft.length) return ft;
+
+  return [];
+}
+
 
 /**
  * Get the probability of the picked result.

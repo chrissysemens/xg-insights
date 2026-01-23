@@ -25,6 +25,8 @@ export type Fixture = {
 
 export type FormLetter = "W" | "D" | "L";
 
+export type Goals = { homeGoals: number; awayGoals: number };
+
 export enum HighlightReason {
   HIGH_GOALS = "HIGH_GOALS",
   BTTS_LIKELY = "BTTS_LIKELY",
@@ -32,6 +34,18 @@ export enum HighlightReason {
 }
 
 export type Location = "home" | "away";
+
+export type Odds1X2 = {
+  home: number | null;
+  draw: number | null;
+  away: number | null;
+};
+
+export type OddsSnapshot = {
+  market: "1x2";
+  decimal: Odds1X2;
+  implied: { home: number | null; draw: number | null; away: number | null };
+};
 
 export type Pagination = {
   has_more?: boolean;
