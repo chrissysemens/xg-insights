@@ -1,4 +1,3 @@
-
 export type FetchJSONOptions = {
   timeoutMs?: number;
   retries?: number;

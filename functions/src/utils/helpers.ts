@@ -1,5 +1,11 @@
 import { ENV } from "../config";
-import { BTTS_HIGHLIGHT_MIN, FINISHED_STATES, OVER25_HIGHLIGHT_MIN, RESULT_GAP_MIN, RESULT_HIGHLIGHT_MIN } from "../consts";
+import {
+  BTTS_HIGHLIGHT_MIN,
+  FINISHED_STATES,
+  OVER25_HIGHLIGHT_MIN,
+  RESULT_GAP_MIN,
+  RESULT_HIGHLIGHT_MIN,
+} from "../consts";
 import { fetchJSON, fixturesBetweenByTeam } from "../sportmonks/client";
 import {
   Fixture,
@@ -12,6 +18,8 @@ import {
   ResultPick,
 } from "../types";
 import { numOrNull } from "./math";
+import { OddsSnapshot } from "../types";
+import { impliedFromDecimal } from "../utils/math";
 
 /**
  * Returns whether both teams scored in a match.
@@ -21,7 +29,7 @@ import { numOrNull } from "./math";
  */
 export const actualBTTS = (hg: number, ag: number): Pick => {
   return hg > 0 && ag > 0 ? "Y" : "N";
-}
+};
 
 /**
  * Returns whether the total goals scored is over 2.5.
@@ -31,7 +39,7 @@ export const actualBTTS = (hg: number, ag: number): Pick => {
  */
 export const actualOver25 = (hg: number, ag: number): Pick => {
   return hg + ag >= 3 ? "Y" : "N";
-}
+};
 
 /**
  * Returns the actual match result based on home and away goals.
@@ -43,7 +51,7 @@ export const actualResult = (hg: number, ag: number): ResultPick => {
   if (hg > ag) return "H";
   if (hg < ag) return "A";
   return "D";
-}
+};
 
 /**
  *Builds ML feature set for a fixture based on team statistics.
@@ -291,7 +299,7 @@ export const buildFeatures = (fx: any, homeStats: any, awayStats: any) => {
   }
 
   return { features, derived };
-}
+};
 
 /**
  * Chunks an array into smaller arrays of a specified size.
@@ -304,14 +312,16 @@ export const chunk = <T>(arr: T[], size: number): T[][] => {
   const out: T[][] = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
   return out;
-}
+};
 
 /**
  * Computes highlight metadata for a prediction.
  * @param p - Prediction object
  * @returns - Object containing highlight score and reason
  */
-export const  computeHighlightMeta = (p: PredictBatchResponse["predictions"][number]) => {
+export const computeHighlightMeta = (
+  p: PredictBatchResponse["predictions"][number],
+) => {
   const candidates: Array<{ reason: HighlightReason; score: number }> = [];
 
   // Exclusive goals highlight: either BTTS or Over2.5
@@ -351,16 +361,17 @@ export const  computeHighlightMeta = (p: PredictBatchResponse["predictions"][num
     highlightScore: candidates[0].score,
     highlightReason: candidates[0].reason,
   };
-}
+};
 
 /**
  * Returns the final score from a fixture object.
  * @param fx - Fixture object containing home and away goals
  * @returns - Object with homeGoals (hg) and awayGoals (ag), or null if not available
  */
-export function extractFinalScoreFromFixture(
-  fx: { homeGoals?: number | null; awayGoals?: number | null },
-) {
+export function extractFinalScoreFromFixture(fx: {
+  homeGoals?: number | null;
+  awayGoals?: number | null;
+}) {
   if (fx.homeGoals == null || fx.awayGoals == null) return null;
   return { hg: fx.homeGoals, ag: fx.awayGoals };
 }
@@ -385,11 +396,8 @@ export function extractFinalScoreFromScoresArray(
   const home = s?.score?.home;
   const away = s?.score?.away;
 
-  return Number.isFinite(home) && Number.isFinite(away)
-    ? { home, away }
-    : null;
+  return Number.isFinite(home) && Number.isFinite(away) ? { home, away } : null;
 }
-
 
 /**
  * Extracts current goals from fixture data.
@@ -429,8 +437,7 @@ export const extractCurrentGoals = (fx: any): Goals | null => {
 
   if (homeGoals == null || awayGoals == null) return null;
   return { homeGoals, awayGoals };
-}
-
+};
 
 /**
  * Extracts home and away participants and positions.
@@ -458,10 +465,14 @@ export const extractHomeAway = (participants: Participant[]) => {
  * @returns - Object containing homeTeamId and awayTeamId
  */
 export const extractTeamIds = (fixture: any) => {
-  const homeTeamId = fixture.participants?.find((p: any) => p.meta?.location === "home")?.id;
-  const awayTeamId = fixture.participants?.find((p: any) => p.meta?.location === "away")?.id;
+  const homeTeamId = fixture.participants?.find(
+    (p: any) => p.meta?.location === "home",
+  )?.id;
+  const awayTeamId = fixture.participants?.find(
+    (p: any) => p.meta?.location === "away",
+  )?.id;
   return { homeTeamId, awayTeamId };
-}
+};
 
 /**
  * Extracts team and opponent xG values from an xG array.
@@ -486,9 +497,7 @@ export const extractTeamAndOppXg = (
     teamXg: typeof teamXg === "number" ? teamXg : null,
     oppXg: typeof oppXg === "number" ? oppXg : null,
   };
-}
-
-
+};
 
 /**
  * Returns head-to-head fixtures between two teams.
@@ -498,12 +507,12 @@ export const extractTeamAndOppXg = (
  * @param count - number of fixtures to retrieve (default is 5)
  * @returns Array of head-to-head fixture objects
  */
-export const fetchH2H = async(
+export const fetchH2H = async (
   homeTeamId: number,
   awayTeamId: number,
   token: string,
   count = 5,
-)  => {
+) => {
   const today = new Date();
   const from = new Date();
   from.setDate(today.getDate() - 365 * 3); // last 3 seasons
@@ -557,19 +566,23 @@ export const fetchH2H = async(
       };
     })
     .filter(Boolean);
-}
+};
 
 /**
  * Gets the final score from an array of score objects.
- * @param scores 
+ * @param scores
  * @returns - An object with home and away scores, or null if not found
  */
 export const getFinalScore = (scores: any[]) => {
-  const home = scores.find(s => s.description === "CURRENT" && s.score.participant === "home")?.score.goals;
-  const away = scores.find(s => s.description === "CURRENT" && s.score.participant === "away")?.score.goals;
+  const home = scores.find(
+    (s) => s.description === "CURRENT" && s.score.participant === "home",
+  )?.score.goals;
+  const away = scores.find(
+    (s) => s.description === "CURRENT" && s.score.participant === "away",
+  )?.score.goals;
   if (typeof home !== "number" || typeof away !== "number") return null;
   return { home, away };
-}
+};
 
 /**
  * Get pagination info from API response.
@@ -595,7 +608,7 @@ export const getXgFixtureArray = (fx: any): any[] => {
   const b = fx?.xgFixture;
   if (Array.isArray(b)) return b;
   return [];
-}
+};
 
 /**
  * Checks if a fixture is in a finished state based on its short name.
@@ -607,15 +620,12 @@ export const isFinished = (shortName?: string) => {
   return FINISHED_STATES.has(shortName);
 };
 
-import { OddsSnapshot } from "../types";
-import { impliedFromDecimal, toDecimal } from "../utils/math";
-
 /**
  * Normalises 1X2 odds from various formats into a standard structure.
  * @param odds - unknown[] | undefined | null
  * @returns - OddsSnapshot | null
  */
-export const  normalise1x2Odds = (
+export const normalise1x2Odds = (
   odds: unknown[] | undefined | null,
 ): OddsSnapshot | null => {
   if (!Array.isArray(odds) || odds.length === 0) return null;
@@ -639,16 +649,19 @@ export const  normalise1x2Odds = (
       .trim();
 
     const value =
-      toDecimal(obj?.value) ??
-      toDecimal(obj?.odd) ??
-      toDecimal(obj?.odds) ??
+      oddsToDecimal(obj?.value) ??
+      oddsToDecimal(obj?.odd) ??
+      oddsToDecimal(obj?.odds) ??
       null;
 
     if (!value) continue;
 
-    if (label === "1" || label.includes("home")) home = Math.max(home ?? 0, value);
-    else if (label === "x" || label.includes("draw")) draw = Math.max(draw ?? 0, value);
-    else if (label === "2" || label.includes("away")) away = Math.max(away ?? 0, value);
+    if (label === "1" || label.includes("home"))
+      home = Math.max(home ?? 0, value);
+    else if (label === "x" || label.includes("draw"))
+      draw = Math.max(draw ?? 0, value);
+    else if (label === "2" || label.includes("away"))
+      away = Math.max(away ?? 0, value);
   }
 
   if (home == null && draw == null && away == null) return null;
@@ -662,7 +675,25 @@ export const  normalise1x2Odds = (
       away: impliedFromDecimal(away),
     },
   };
-}
+};
+
+/**
+ * Converts SportsMonks odds to decimal odds.
+ * Handles scaled values (e.g. 301 -> 3.01).
+ */
+export const oddsToDecimal = (n: unknown): number | null => {
+  if (n == null) return null;
+
+  const raw =
+    typeof n === "string" ? Number(n) : typeof n === "number" ? n : NaN;
+
+  if (!Number.isFinite(raw)) return null;
+
+  // SportsMonks often returns odds * 100
+  const value = raw >= 100 ? raw / 100 : raw;
+
+  return value > 1 ? Number(value.toFixed(3)) : null;
+};
 
 /**
  * Picks score rows from scores array, prioritizing "CURRENT" then "FT".
@@ -680,15 +711,16 @@ export const pickScoreRows = (scores: any[]): any[] => {
   if (ft.length) return ft;
 
   return [];
-}
-
+};
 
 /**
  * Get the probability of the picked result.
  * @param {PredictBatchResponse["predictions"][number]} p
  * @return {*} - probability number
  */
-export const pickedResultProb = (p: PredictBatchResponse["predictions"][number]) => {
+export const pickedResultProb = (
+  p: PredictBatchResponse["predictions"][number],
+) => {
   const pick = p.matchResult.pick;
   if (pick === "H") return p.matchResult.H ?? 0;
   if (pick === "D") return p.matchResult.D ?? 0;
@@ -719,7 +751,7 @@ export const resultGap = (p: PredictBatchResponse["predictions"][number]) => {
   const best = probs[0] ?? 0;
   const second = probs[1] ?? 0;
   return Math.max(0, best - second);
-}
+};
 
 /**
  * Calculates the weighted average of given values and weights.
@@ -734,4 +766,4 @@ export const weightedAvg = (values: number[], weights: number[]) => {
   if (!denom) return null;
   const num = values.reduce((sum, v, i) => sum + v * (w[i] ?? 0), 0);
   return num / denom;
-}
+};

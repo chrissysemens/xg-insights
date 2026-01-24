@@ -34,3 +34,8 @@ Thumbs.db
 lib/
 lib/**
 /lib/**
+
+
+## built files
+functions/lib/
+functions/**/*.map

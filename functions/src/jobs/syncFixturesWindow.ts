@@ -8,6 +8,7 @@ import {
   getPagination,
   isFinished,
   safeLeagueName,
+  normalise1x2Odds,
 } from "../utils/helpers";
 
 /**
@@ -18,7 +19,10 @@ export async function syncFixturesWindow(token: string) {
   const db = admin.firestore();
 
   const windowStart = new Date();
-  const windowEnd = addDaysUTC(windowStart, ENV.FEATURES.FIXTURE_LOOKAHEAD_DAYS);
+  const windowEnd = addDaysUTC(
+    windowStart,
+    ENV.FEATURES.FIXTURE_LOOKAHEAD_DAYS,
+  );
 
   const windowStartStr = formatDateUTC(windowStart);
   const windowEndStr = formatDateUTC(windowEnd);
@@ -60,12 +64,10 @@ export async function syncFixturesWindow(token: string) {
 
     hasMore = hasMoreFromApi ?? fixtures.length > 0;
 
-
     let batch = db.batch();
     let operations = 0;
 
     for (const f of fixtures) {
-
       // Filter leagues
       if (!ALLOWED_LEAGUE_IDS.has(f.league_id)) {
         continue;
@@ -196,6 +198,17 @@ export async function syncFixturesWindow(token: string) {
         fixturePayload.homeGoals = goals.homeGoals;
         fixturePayload.awayGoals = goals.awayGoals;
       }
+
+      const oddsSnapshot = normalise1x2Odds(f.odds);
+
+      fixturePayload.odds = oddsSnapshot
+        ? {
+            market1x2: oddsSnapshot,
+            fetchedAt: admin.firestore.FieldValue.serverTimestamp(),
+          }
+        : null;
+
+      fixturePayload.oddsAvailable = !!oddsSnapshot;
 
       const liveRef = db.collection("fixtures_live").doc(fixtureId);
       const archRef = db.collection("fixtures_archive").doc(fixtureId);
