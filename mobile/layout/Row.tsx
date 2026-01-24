@@ -3,6 +3,11 @@ import { Flex, type FlexProps } from './Flex';
 
 export type RowProps = Omit<FlexProps, 'direction'>;
 
-export function Row(props: RowProps) {
+/**
+ * Row: for positioning horizontally
+ * @param props - Row props
+ * @returns 
+ */
+export const Row = (props: RowProps) => {
   return <Flex direction="row" {...props} />;
 }

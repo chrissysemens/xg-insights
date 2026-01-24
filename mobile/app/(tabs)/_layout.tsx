@@ -3,9 +3,11 @@ import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/useTheme';
+import { useTranslation } from 'react-i18next';
 
 export default function TabsLayout() {
   const { theme } = useTheme();
+  const { t } = useTranslation();
   const c = theme.colours;
   const insets = useSafeAreaInsets();
 
@@ -14,37 +16,30 @@ export default function TabsLayout() {
       screenOptions={{
         headerShown: false,
         tabBarHideOnKeyboard: true,
-
         sceneStyle: {
           backgroundColor: c.bg,
         },
-
         tabBarStyle: {
           backgroundColor: c.surface,
           borderTopColor: c.border,
           borderTopWidth: 1,
-
-          // ✅ keep it above Android/iOS system bars
           paddingBottom: Math.max(insets.bottom, 8),
           paddingTop: 8,
         },
-
         tabBarItemStyle: {
           paddingHorizontal: 0,
         },
-
         tabBarActiveTintColor: c.primary,
         tabBarInactiveTintColor: c.muted,
-
         tabBarLabelStyle: {
           fontSize: 12,
         },
       }}
     >
       <Tabs.Screen
-        name="index"
+        name='index'
         options={{
-          title: 'Home',
+          title: t('routes.home'),
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons
               name={focused ? 'home' : 'home-outline'}
@@ -56,9 +51,9 @@ export default function TabsLayout() {
       />
 
       <Tabs.Screen
-        name="performance"
+        name='performance'
         options={{
-          title: 'Performance',
+          title: t('routes.performance'),
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons
               name={focused ? 'stats-chart' : 'stats-chart-outline'}
@@ -70,9 +65,9 @@ export default function TabsLayout() {
       />
 
       <Tabs.Screen
-        name="about"
+        name='about'
         options={{
-          title: 'About',
+          title: t('routes.about'),
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons
               name={focused ? 'document-text' : 'document-text-outline'}

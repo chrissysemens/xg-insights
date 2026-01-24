@@ -7,6 +7,11 @@ type Props = ViewProps & {
   padded?: boolean;
 };
 
+/**
+ * Screen component for layouting screens
+ * @param param0 - Screen props
+ * @returns - Screen component
+ */
 export const Screen = ({
   scroll = false,
   padded = false,

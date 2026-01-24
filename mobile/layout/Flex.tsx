@@ -1,4 +1,3 @@
-// layout/Flex.tsx
 import React from 'react';
 import { View, ViewProps, ViewStyle } from 'react-native';
 import { useTheme } from '../theme/useTheme';
@@ -16,7 +15,12 @@ export type FlexProps = ViewProps & {
   fullWidth?: boolean;
 };
 
-export function Flex({
+/**
+ * Flex wrapper component
+ * @param param0 - Flex props
+ * @returns - Flex component
+ */
+export const Flex = ({
   direction = 'column',
   gap,
   align = 'stretch',
@@ -28,7 +32,7 @@ export function Flex({
   style,
   children,
   ...props
-}: FlexProps) {
+}: FlexProps) => {
   const { theme } = useTheme();
   const kids = React.Children.toArray(children).filter(Boolean);
 
@@ -60,7 +64,6 @@ export function Flex({
 
         if (!spacingStyle) return child;
 
-        // ✅ If it's a valid element and it has a style prop, inject into it.
         if (React.isValidElement(child)) {
           const props = child.props as any;
 
@@ -71,7 +74,6 @@ export function Flex({
           }
         }
 
-        // ✅ Otherwise fall back to a wrapper (for Fragments, custom components without style, etc.)
         return (
           <View key={i} style={spacingStyle}>
             {child as any}

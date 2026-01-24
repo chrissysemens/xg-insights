@@ -1,6 +1,9 @@
 {
   "common": {
-    "hello": "Hello"
+    "btts": "BTTS",
+    "correct": "Correct",
+    "incorrect": "Incorrect",
+    "loading": "Loading…"
   },
   "home": {
     "highlightedFixtures": "Highlighted fixtures",
@@ -17,10 +20,21 @@
     "bttsLikely": "BTTS likely",
     "highlighted": "Highlighted"
   },
+  "fixture": {
+    "scoreOutlook": "Score outlook"
+  },
   "performance": {
     "modelPerformance": "Model Performance",
     "performanceDescription": "Overview of the model's prediction accuracy over time.",
     "overTime": "Performance over time",
-    "weeklyAccuracy": "Weekly accuracy (%)"
+    "weeklyAccuracy": "Weekly accuracy (%)",
+    "overallAccuracy": "Overall accuracy",
+    "noPredictions": "No predictions",
+    "over25Goals": "Over 2.5 goals"
+  },
+  "routes": {
+    "about": "About",
+    "home": "Home",
+    "performance": "Performance"
   }
 }

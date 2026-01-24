@@ -10,9 +10,12 @@ type Props = {
   children: React.ReactNode;
 };
 
-export function Section({ title, description, children }: Props) {
-  const { theme } = useTheme();
-
+/**
+ * Section component for layouting sections with title and description
+ * @param param0 - Section props
+ * @returns - Section component
+ */
+export const Section = ({ title, description, children }: Props) => {
   return (
     <Stack gap={3}>
       <Stack gap={1}>

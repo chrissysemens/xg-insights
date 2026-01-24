@@ -9,16 +9,11 @@ import { useTheme } from '@/theme/useTheme';
 import { Header } from '@/components/header/Header';
 
 import { useHighlightedPredictions } from '@/hooks/useHighlightedPredictions';
+import { PredictionDoc } from '@/types';
 
-const getGoalsScore = (p: any) => {
-  // New: single chosen goals badge from backend (never both)
+const getGoalsScore = (p: PredictionDoc | null | undefined) => {
   const gp = p?.goalsPick;
-  if (gp?.pick === 'Y' && typeof gp?.prob === 'number') return gp.prob;
-
-  // Fallback for older docs
-  const o = p?.over25?.Y ?? 0;
-  const b = p?.btts?.Y ?? 0;
-  return Math.max(o, b);
+  return gp?.pick === 'Y' ? gp.prob : null;
 };
 
 const getResultConf = (p: any) =>
@@ -47,9 +42,11 @@ export default function Home() {
   const goalHighlights = useMemo(() => {
     return items
       .filter((x) => x.prediction.highlightReason !== 'CLEAR_FAVOURITE')
-      .sort(
-        (a, b) => getGoalsScore(b.prediction) - getGoalsScore(a.prediction),
-      );
+      .sort((a, b) => {
+        const aScore = getGoalsScore(a.prediction) ?? 0;
+        const bScore = getGoalsScore(b.prediction) ?? 0;
+        return bScore - aScore;
+      });
   }, [items]);
 
   return (
@@ -76,7 +73,13 @@ export default function Home() {
             >
               {t('home.highlightedFixtures')}
             </Text>
-            <Text style={{ ...theme.typography.caption, color: c.muted, marginBottom: 20 }}>
+            <Text
+              style={{
+                ...theme.typography.caption,
+                color: c.muted,
+                marginBottom: 20,
+              }}
+            >
               {t('home.topPicksDescription')}
             </Text>
           </View>

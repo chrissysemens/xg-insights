@@ -22,6 +22,7 @@ import { AnimatedLine } from '@/components/charts/AnimatedLine';
 
 export default function PerformanceScreen() {
   const { theme } = useTheme();
+  const { t } = useTranslation();
   const c = theme.colours;
 
   const {
@@ -50,18 +51,16 @@ export default function PerformanceScreen() {
     const toDonut = (correct: number, total: number): DonutSlice[] => {
       const incorrect = Math.max(0, total - correct);
       return [
-        { label: 'Correct', value: correct, color: c.success },
-        { label: 'Incorrect', value: incorrect, color: c.surface2 },
+        { label: t('common.correct'), value: correct, color: c.success },
+        { label: t('common.incorrect'), value: incorrect, color: c.surface2 },
       ].filter((x) => x.value > 0);
     };
 
     return {
       totalEvaluated: evaluated.length,
-
       result,
       btts,
       over25,
-
       resultDonut: toDonut(result.correct, result.total),
       bttsDonut: toDonut(btts.correct, btts.total),
       over25Donut: toDonut(over25.correct, over25.total),
@@ -75,8 +74,6 @@ export default function PerformanceScreen() {
     () => buildWeeklyResultAccuracy(fixtures),
     [fixtures],
   );
-
-  const { t } = useTranslation();
 
   return (
     <AppLayout safe>
@@ -116,36 +113,36 @@ export default function PerformanceScreen() {
             {!loading && !error && totalEvaluated > 0 && (
               <Stack gap={3}>
                 <DonutChart
-                  title="Match Result picks"
+                  title={t('performance.overallAccuracy')}
                   data={resultDonut}
                   centerText={
                     result.total > 0
                       ? `${result.correct}/${result.total}\n${pct(result.correct, result.total)}%`
-                      : 'No predictions'
+                      : t('performance.noPredictions')
                   }
                 />
 
                 <Row gap={3} align="flex-start" fullWidth>
                   <Stack flex={1} fullWidth style={{ minWidth: 0 }}>
                     <DonutChart
-                      title="Over 2.5 goals"
+                      title={t('performance.over25Goals')}
                       data={over25Donut}
                       centerText={
                         result.total > 0
                           ? `${over25.correct}/${over25.total}\n${pct(over25.correct, over25.total)}%`
-                          : 'No predictions'
+                          : t('performance.noPredictions')
                       }
                     />
                   </Stack>
 
                   <Stack flex={1} fullWidth style={{ minWidth: 0 }}>
                     <DonutChart
-                      title="BTTS"
+                      title={t('common.btts')}
                       data={bttsDonut}
                       centerText={
                         result.total > 0
                           ? `${btts.correct}/${btts.total}\n${pct(btts.correct, btts.total)}%`
-                          : 'No predictions'
+                          : t('performance.noPredictions')
                       }
                     />
                   </Stack>

@@ -9,13 +9,18 @@ type Props = ViewProps & {
   safe?: boolean;
 };
 
-export function AppLayout({
+/**
+ * AppLayout: Main layout wrapper for the app
+ * @param param0 - AppLayout props
+ * @returns - AppLayout component
+ */
+export const AppLayout = ({
   children,
   padded = false,
   safe = false,
   style,
   ...props
-}: Props) {
+}: Props) => {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
 
@@ -38,4 +43,4 @@ export function AppLayout({
       {children}
     </View>
   );
-}
+};

@@ -5,16 +5,17 @@ export type TeamDoc = {
   imagePath?: string | null;
 };
 
-export type MatchResult = {
-  H: number;
-  D: number;
-  A: number;
-  pick: 'H' | 'D' | 'A';
-};
-export type YnPick = { Y: number; N: number; pick: 'Y' | 'N' };
+export type Yn = 'Y' | 'N';
+
+export type YnPick = { Y: number; N: number; pick: Yn };
+
+export type Pick = { key: string; label: string };
+
+export type Scoreline = { h: number; a: number; p: number };
 
 export type PredictionDoc = {
   fixtureId: string;
+  goalsPick: GoalsPick;
   modelVersion: string;
   matchResult: MatchResult;
   over25: YnPick | null;
@@ -41,6 +42,12 @@ export type FixtureDoc = {
   state?: { shortName?: string };
 };
 
+export type GoalsPick = {
+  kind: 'btts' | 'over25';
+  pick: 'Y';
+  prob: number;
+} | null;
+
 export type HighlightItem = {
   fixtureId: string;
   fixture: FixtureDoc;
@@ -58,9 +65,9 @@ export enum HighlightReason {
 export type ArchivedFixture = {
   evaluation?: {
     actual?: {
-      result?: 'H' | 'D' | 'A';
-      btts?: 'Y' | 'N';
-      over25?: 'Y' | 'N';
+      result?: Result;
+      btts?: Yn;
+      over25?: Yn;
     };
     correct?: {
       result?: boolean;
@@ -70,60 +77,86 @@ export type ArchivedFixture = {
   };
 };
 
-export type ArchivedFixtureDoc = {
-  evaluationDone?: boolean;
-  startingAtTimestamp?: number;
-  evaluation?: {
-    predicted?: {
-      resultPick?: 'H' | 'D' | 'A';
-      bttsPick?: 'Y' | 'N';
-      over25Pick?: 'Y' | 'N';
-    };
-    actual?: {
-      result?: 'H' | 'D' | 'A';
-      btts?: 'Y' | 'N';
-      over25?: 'Y' | 'N';
-    };
+export type Evaluation = {
+  predicted?: {
+    resultPick?: Result;
+    bttsPick?: Yn;
+    over25Pick?: Yn;
+  };
+  actual?: {
+    result?: Result;
+    btts?: Yn;
+    over25?: Yn;
   };
 };
 
-export type FormLetter = 'W' | 'D' | 'L';
+export type ArchivedFixtureDoc = {
+  evaluationDone?: boolean;
+  startingAtTimestamp?: number;
+  evaluation?: Evaluation;
+};
+
+export type Form = {
+  homeLast5?: Result[] | null;
+  awayLast5?: Result[] | null;
+};
+
+export type Result = 'W' | 'D' | 'L';
+export type Outcome = 'H' | 'D' | 'A';
+
+export type Team = { id: number; name: string; imagePath?: string | null };
+
+export type League = { id: number; name: string };
+
+export type H2H = {
+  homeName: string;
+  awayName: string;
+  homeGoals: number;
+  awayGoals: number;
+  startingAtTimestamp: number;
+};
+
+export type Xg = {
+  awayLast5Against: number[];
+  awayLast5AgainstAvg: number;
+  awayLast5For: number[];
+  awayLast5ForAvg: number;
+  homeLast5Against: number[];
+  homeLast5AgainstAvg: number;
+  homeLast5For: number[];
+  homeLast5ForAvg: number;
+};
+
+export type MatchResult = {
+  H: number;
+  D: number;
+  A: number;
+  pick: Outcome;
+};
+
+export type Over25 = { Y: number; N: number; pick: Yn };
+
+export type BTTS = { Y: number; N: number; pick: Yn};
+
+export type Prediction = {
+  matchResult: MatchResult | null;
+  over25?: Over25 | null;
+  btts?: BTTS | null;
+  highlightReason: HighlightReason | null;
+  highlightScore: number;
+  highlighted: boolean;
+};
 
 export type FixtureDetailsDoc = {
   fixtureId: string;
   startingAtTimestamp?: number;
-  league?: { id: number; name: string } | null;
-  home: { id: number; name: string; imagePath?: string | null };
-  away: { id: number; name: string; imagePath?: string | null };
-  form?: {
-    homeLast5?: FormLetter[] | null;
-    awayLast5?: FormLetter[] | null;
-  } | null;
-  h2h?: Array<{
-    homeName: string;
-    awayName: string;
-    homeGoals: number;
-    awayGoals: number;
-    startingAtTimestamp: number;
-  }> | null;
-  prediction?: {
-    matchResult: { H: number; D: number; A: number; pick: 'H' | 'D' | 'A' };
-    over25?: { Y: number; N: number; pick: 'Y' | 'N' } | null;
-    btts?: { Y: number; N: number; pick: 'Y' | 'N' } | null;
-    highlightReason: 'HIGH_GOALS' | 'BTTS_LIKELY' | 'CLEAR_FAVOURITE';
-    highlightScore: number;
-    highlighted: boolean;
-  } | null;
-  xg: {
-    awayLast5Against: number[],
-    awayLast5AgainstAvg: number, 
-    awayLast5For: number[],
-    awayLast5ForAvg: number,
-    homeLast5Against: number[],
-    homeLast5AgainstAvg: number, 
-    homeLast5For: number[],
-    homeLast5ForAvg: number
-  } | null;
+  league: League | null;
+  home: Team;
+  away: Team;
+  form?: Form | null;
+  h2h?: H2H[] | null;
+  prediction: Prediction | null;
+  xg: Xg | null;
 };
 export type Metric = { correct: number; total: number };
 
