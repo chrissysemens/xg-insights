@@ -7,11 +7,22 @@ import { getDoc, doc } from 'firebase/firestore';
  * @param fixtureId - id of the fixture
  * @returns - FixtureDetailsDoc or null if not found
  */
-export const getFixtureDetails = async (fixtureId: string) => {
-  const snap = await getDoc(doc(db, 'fixture_details', fixtureId));
-  if (!snap.exists()) return null;
-  return snap.data() as FixtureDetailsDoc;
-};
+export async function getFixtureDetails(
+  fixtureId: string,
+): Promise<FixtureDetailsDoc | null> {
+  const detailsSnap = await getDoc(doc(db, 'fixture_details', fixtureId));
+  if (!detailsSnap.exists()) return null;
+
+  const liveSnap = await getDoc(doc(db, 'fixtures_live', fixtureId));
+
+  const details = detailsSnap.data();
+  const live = liveSnap.exists() ? liveSnap.data() : null;
+
+  return {
+    ...details,
+    odds: live?.odds ?? null,
+  } as FixtureDetailsDoc;
+}
 
 /**
  * Returns cleaned array of max 5 numbers rounded to 2 decimal places
@@ -38,9 +49,7 @@ export const toLineData = (arr?: number[]) => {
  * @param data - FixtureDetailsDoc
  * @returns - Array of PickChip
  */
-export const buildPredictionBadges = (
-  data: FixtureDetailsDoc,
-): Pick[] => {
+export const buildPredictionBadges = (data: FixtureDetailsDoc): Pick[] => {
   if (!data) {
     return [];
   }

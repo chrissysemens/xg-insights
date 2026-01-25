@@ -1,18 +1,24 @@
-import { useTheme } from "@/theme/useTheme";
-import { View } from "react-native";
-import { Text } from "@/components/text/Text";
-import { Row } from "@/layout/Row";
-import { FixtureDetailsDoc } from "@/types";
-import { computeLambdas } from "@/utils/poisson";
+import { useTheme } from '@/theme/useTheme';
+import { View } from 'react-native';
+import { Text } from '@/components/text/Text';
+import { Row } from '@/layout/Row';
+import { FixtureDetailsDoc, Market1x2 } from '@/types';
+import { computeLambdas } from '@/utils/poisson';
+import { useTranslation } from 'react-i18next';
 
 type xgTotalsProps = {
   fixture: FixtureDetailsDoc;
-}
+  market1x2?: Market1x2 | null;
+};
 
-const XgTotals = ({fixture}: xgTotalsProps) => {
+const XgTotals = ({ fixture, market1x2 }: xgTotalsProps) => {
   const { theme } = useTheme();
+  const { t } = useTranslation();
   const c = theme.colours;
   const lambdas = computeLambdas(fixture);
+
+  const fmtOdd = (v: number | null | undefined) =>
+    typeof v === 'number' ? v.toFixed(2) : '–';
 
   return (
     <View
@@ -30,7 +36,7 @@ const XgTotals = ({fixture}: xgTotalsProps) => {
           marginBottom: 8,
         }}
       >
-        Score outlook
+        {t('fixture.scoreOutlook')}
       </Text>
 
       <Row style={{ alignItems: 'center' }}>
@@ -44,7 +50,7 @@ const XgTotals = ({fixture}: xgTotalsProps) => {
             {lambdas?.home?.toFixed(2)}
           </Text>
           <Text style={{ ...theme.typography.caption, color: c.muted }}>
-            expected goals
+            {t('fixture.expectedGoals')}
           </Text>
         </View>
 
@@ -67,12 +73,26 @@ const XgTotals = ({fixture}: xgTotalsProps) => {
             {lambdas?.away?.toFixed(2)}
           </Text>
           <Text style={{ ...theme.typography.caption, color: c.muted }}>
-            expected goals
+            {t('fixture.expectedGoals')}
           </Text>
         </View>
       </Row>
+      <View style={{marginTop: 30}}>
+        {market1x2 ? (
+          <Text
+            style={{
+              ...theme.typography.caption,
+              color: c.muted,
+              opacity: 0.7,
+            }}
+          >
+            Market (1X2): {fmtOdd(market1x2.home)} • {fmtOdd(market1x2.draw)} •{' '}
+            {fmtOdd(market1x2.away)}
+          </Text>
+        ) : null}
+      </View>
     </View>
   );
 };
 
-export { XgTotals }
+export { XgTotals };

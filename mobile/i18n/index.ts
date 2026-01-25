@@ -13,7 +13,7 @@ const deviceLanguage = (
 ).toLowerCase();
 
 const supported = Object.keys(resources);
-const lng = 'en'; // supported.includes(deviceLanguage) ? deviceLanguage : 'en';
+const lng = 'en';
 
 i18n.use(initReactI18next).init({
   resources,

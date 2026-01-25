@@ -78,7 +78,6 @@ const Input = forwardRef<RNTextInput, Props>(
               color: theme.colours.text,
               borderColor,
             },
-            // Apply your default text style consistently
             theme.typography.body,
             style,
           ]}

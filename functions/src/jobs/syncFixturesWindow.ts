@@ -9,6 +9,7 @@ import {
   isFinished,
   safeLeagueName,
   normalise1x2Odds,
+  computeMarketProbs1x2,
 } from "../utils/helpers";
 
 /**
@@ -39,6 +40,30 @@ export async function syncFixturesWindow(token: string) {
     567, 573, 591, 600,
   ]);
 
+  const getHasMore = (pagination: any, currentPage: number, count: number) => {
+    if (typeof pagination?.has_more === "boolean") return pagination.has_more;
+
+    const cur =
+      Number(
+        pagination?.current_page ??
+          pagination?.currentPage ??
+          pagination?.page ??
+          currentPage,
+      ) || currentPage;
+
+    const last =
+      Number(
+        pagination?.last_page ??
+          pagination?.lastPage ??
+          pagination?.total_pages ??
+          pagination?.totalPages,
+      ) || NaN;
+
+    if (Number.isFinite(last)) return cur < last;
+
+    return count > 0;
+  };
+
   let page = 1;
   let hasMore = true;
 
@@ -58,11 +83,8 @@ export async function syncFixturesWindow(token: string) {
     const json = await res.json();
     const fixtures: Fixture[] = json?.data ?? [];
 
-    const pagination = getPagination(json);
-    const hasMoreFromApi =
-      typeof pagination?.has_more === "boolean" ? pagination.has_more : null;
-
-    hasMore = hasMoreFromApi ?? fixtures.length > 0;
+    const pagination = getPagination(json) as any;
+    hasMore = getHasMore(pagination, page, fixtures.length);
 
     let batch = db.batch();
     let operations = 0;
@@ -200,10 +222,14 @@ export async function syncFixturesWindow(token: string) {
       }
 
       const oddsSnapshot = normalise1x2Odds(f.odds);
+      const marketProbs = computeMarketProbs1x2(oddsSnapshot?.decimal);
 
       fixturePayload.odds = oddsSnapshot
         ? {
-            market1x2: oddsSnapshot,
+            market1x2: {
+              ...oddsSnapshot,
+              marketProbs,
+            },
             fetchedAt: admin.firestore.FieldValue.serverTimestamp(),
           }
         : null;
@@ -296,14 +322,15 @@ export async function syncFixturesWindow(token: string) {
     if (operations > 0) await batch.commit();
 
     page++;
-    if (hasMoreFromApi == null && fixtures.length === 0) hasMore = false;
+
+    if (fixtures.length === 0) hasMore = false;
   }
 
   // Prune stale fixtures from live:
   const liveSnap = await db
     .collection("fixtures_live")
     .where("inWindow", "==", true)
-    .where("windowStart", "==", windowStart)
+    .where("windowStart", "==", windowStartStr)
     .where("windowEnd", "==", windowEndStr)
     .get();
 

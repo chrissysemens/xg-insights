@@ -19,7 +19,7 @@ export type Fixture = {
   has_premium_odds: boolean;
   state?: { id: number; short_name?: string; name?: string; state?: string };
   participants?: Participant[];
-  odds?: unknown[];
+  odds?: SportMonksOdd[];
   scores?: unknown[];
   league?: {
     id?: number;
@@ -27,6 +27,31 @@ export type Fixture = {
     short_code?: string | null;
     short_code_2?: string | null;
   };
+};
+
+export type RawPagination = {
+  has_more?: boolean;
+  current_page?: number;
+  last_page?: number;
+  total_pages?: number;
+  [k: string]: unknown;
+};
+
+export type SportMonksOdd = {
+  market_id: number;
+  bookmaker_id: number;
+  label: string; // "Home" | "Draw" | "Away" etc
+  value: string | number | null;
+  stopped?: boolean;
+  latest_bookmaker_update?: string | null;
+};
+
+export type Market1x2 = {
+  market: "1x2";
+  decimal: Odds1x2Triple;
+  implied: Odds1x2Triple;
+  bookmakerId: number;
+  updatedAt?: string | null;
 };
 
 export type FormLetter = "W" | "D" | "L";
@@ -40,6 +65,15 @@ export enum HighlightReason {
 }
 
 export type Location = "home" | "away";
+
+export type Odds1x2Triple = { home: number; draw: number; away: number };
+
+export type MarketProbs1x2 = {
+  home: number;
+  draw: number;
+  away: number;
+  overround: number; // sum of raw implieds
+};
 
 export type Odds1X2 = {
   home: number | null;

@@ -3,11 +3,11 @@ import { View } from 'react-native';
 import { Text } from '@/components/text/Text';
 import { Row } from '@/layout/Row';
 
-const LikelyScores = ({
-  scores,
-}: {
+type LikelyScoresProps = {
   scores: { h: number; a: number; p: number }[];
-}) => {
+};
+
+const LikelyScores = ({ scores }: LikelyScoresProps) => {
   const { theme } = useTheme();
   const c = theme.colours;
 
@@ -24,7 +24,7 @@ const LikelyScores = ({
           ...theme.typography.body,
           fontFamily: theme.fontFamilies.bold,
           color: c.text,
-          marginBottom: 8,
+          marginBottom: 6,
         }}
       >
         Most likely scores

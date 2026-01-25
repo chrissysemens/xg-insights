@@ -124,7 +124,7 @@ export const TeamsRow: React.FC<TeamsRowProps> = ({
           flex: 1,
           flexDirection: 'row',
           alignItems: 'center',
-          minWidth: 0, // important for ellipsis
+          minWidth: 0,
         }}
       >
         {!!homeImage && (
@@ -161,7 +161,7 @@ export const TeamsRow: React.FC<TeamsRowProps> = ({
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'flex-end',
-          minWidth: 0, // important for ellipsis
+          minWidth: 0,
         }}
       >
         <Text

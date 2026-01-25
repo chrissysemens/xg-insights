@@ -4,8 +4,8 @@ import { View } from 'react-native';
 import { Image } from 'react-native';
 import { Text } from '@/components/text/Text';
 import { FixtureDetailsDoc, Result } from '@/types';
-import { FormBadge } from '@/fetatures/badges/FormBadge';
-import { PredictionBadge } from '@/fetatures/badges/PredictionBadge';
+import { FormBadge } from '@/features/badges/FormBadge';
+import { PredictionBadge } from '@/features/badges/PredictionBadge';
 import { buildPredictionBadges } from './helpers';
 import { useTheme } from '@/theme/useTheme';
 

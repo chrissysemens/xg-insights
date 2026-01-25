@@ -26,6 +26,11 @@ export type PredictionDoc = {
   generatedAt?: any;
 };
 
+export type FixtureOdds = {
+  market1x2: Market1x2;
+  fetchedAt?: any; // or Firebase Timestamp type if you have it
+} | null;
+
 export type FixtureDoc = {
   id: string;
   startingAtTimestamp: number;
@@ -39,6 +44,7 @@ export type FixtureDoc = {
   hasOdds: boolean;
   oddsAvailable: boolean;
   xgAvailable?: boolean;
+  odds: FixtureOdds;
   state?: { shortName?: string };
 };
 
@@ -136,7 +142,7 @@ export type MatchResult = {
 
 export type Over25 = { Y: number; N: number; pick: Yn };
 
-export type BTTS = { Y: number; N: number; pick: Yn};
+export type BTTS = { Y: number; N: number; pick: Yn };
 
 export type Prediction = {
   matchResult: MatchResult | null;
@@ -146,6 +152,7 @@ export type Prediction = {
   highlightScore: number;
   highlighted: boolean;
 };
+
 
 export type FixtureDetailsDoc = {
   fixtureId: string;
@@ -157,7 +164,19 @@ export type FixtureDetailsDoc = {
   h2h?: H2H[] | null;
   prediction: Prediction | null;
   xg: Xg | null;
+  odds?: {
+    market1x2?: {
+      decimal?: Market1x2 | null;
+      implied?: Market1x2 | null;
+    } | null;
+  } | null;
 };
 export type Metric = { correct: number; total: number };
 
 export type Datum = { x: number; y: number };
+
+export type Market1x2 = {
+  home?: number | null;
+  draw?: number | null;
+  away?: number | null;
+};

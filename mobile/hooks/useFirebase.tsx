@@ -33,7 +33,6 @@ export const useFirebase = <T extends DocumentData>({
   const q = useMemo(() => {
     const ref = collection(db, collectionName);
     return query(ref, ...constraints);
-    // NOTE: depend on constraintsKey (caller controls when meaning changes)
   }, [collectionName, constraintsKey]);
 
   useEffect(() => {

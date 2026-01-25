@@ -12,32 +12,30 @@ type Props = {
   away: Datum[];
   title?: string;
   subtitle?: string;
-
-  homeLabel?: string; // e.g. "Inter"
-  awayLabel?: string; // e.g. "Pisa"
+  homeLabel?: string;
+  awayLabel?: string;
   homeAvg?: number | null;
   awayAvg?: number | null;
-
   height?: number;
   duration?: number;
 
-  /** optional: force a stable y-scale across fixtures */
+  /** Force stable Y scale */
   yDomain?: [number, number];
 
-  /** x axis label format */
+  /** X axis label format */
   xLabelMode?: 'date' | 'game';
 
-  /** emphasise the latest point */
+  /** Emphasise the latest point */
   emphasiseLatest?: boolean;
 
-  /** render the avg line under subtitle */
+  /** Render the avg line under subtitle */
   showAverages?: boolean;
 };
 
 const clamp = (v: number, min: number, max: number) =>
   Math.max(min, Math.min(max, v));
 
-const fmt2 = (v: number) => Number(v.toFixed(2));
+const roundTo2dp = (v: number) => Number(v.toFixed(2));
 
 export const DualSeries = ({
   home,
@@ -71,7 +69,7 @@ export const DualSeries = ({
 
   const awayColor = c.text2; // or c.muted if you want it subtler
 
-  // 1) merge by x, keeping separate keys
+  // Merge data points by x value
   const merged = useMemo(() => {
     const map = new Map<number, { x: number; home?: number; away?: number }>();
 
@@ -85,16 +83,16 @@ export const DualSeries = ({
     return [...map.values()].sort((a, b) => a.x - b.x);
   }, [home, away]);
 
-  // 2) sanitize (xG should never be negative; cap to avoid outliers)
+  // Santitize data for display
   const displayData = useMemo(() => {
     return merged.map((d) => ({
       x: d.x,
-      home: d.home == null ? null : fmt2(clamp(d.home, 0, 10)),
-      away: d.away == null ? null : fmt2(clamp(d.away, 0, 10)),
+      home: d.home == null ? null : roundTo2dp(clamp(d.home, 0, 10)),
+      away: d.away == null ? null : roundTo2dp(clamp(d.away, 0, 10)),
     }));
   }, [merged]);
 
-  // 3) y domain (defaults to xG-friendly range if not provided)
+  // YDomain (xgFriendly)
   const computedYDomain = useMemo<[number, number]>(() => {
     if (yDomain) return yDomain;
 
@@ -107,7 +105,7 @@ export const DualSeries = ({
 
     const max = Math.max(...vals);
 
-    // 👇 visual buffer to account for stroke + marker
+    // Space for stroke and marker
     const VISUAL_BUFFER = 0.8;
 
     const padded = max + VISUAL_BUFFER;
@@ -138,9 +136,9 @@ export const DualSeries = ({
       <Text
         style={{ ...theme.typography.caption, color: c.muted, marginTop: 2 }}
       >
-        {homeAvg != null ? `${homeLabel} ${fmt2(homeAvg)}` : homeLabel}
+        {homeAvg != null ? `${homeLabel} ${roundTo2dp(homeAvg)}` : homeLabel}
         {'  •  '}
-        {awayAvg != null ? `${awayLabel} ${fmt2(awayAvg)}` : awayLabel}
+        {awayAvg != null ? `${awayLabel} ${roundTo2dp(awayAvg)}` : awayLabel}
       </Text>
     ) : null;
 
@@ -154,7 +152,7 @@ export const DualSeries = ({
       }}
     >
       {(title || subtitle || avgLine) && (
-        <View style={{ marginBottom: theme.spacing[2] }}>
+        <View>
           {!!title && (
             <Text
               style={{
@@ -212,7 +210,7 @@ export const DualSeries = ({
               font: axisFont,
               formatYLabel: (label) => {
                 const v = Number(label ?? 0);
-                // sparse labels for mobile
+                // Mobile formatting for labels
                 return v === 0 || v === computedYDomain[1] ? v.toFixed(1) : '';
               },
             },
@@ -261,7 +259,7 @@ export const DualSeries = ({
           }}
         </CartesianChart>
 
-        {/* lightweight labels (TOP RIGHT) */}
+        {/** Labels */}
         <View
           pointerEvents="none"
           style={{

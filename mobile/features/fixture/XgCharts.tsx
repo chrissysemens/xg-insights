@@ -2,18 +2,20 @@ import { Stack } from '@/layout/Stack';
 import { DualSeries } from '@/components/charts/DualSeries';
 import { toLineData } from './helpers';
 import { Xg } from '@/types';
+import { useTranslation } from 'react-i18next';
 
 type xGChartsProps = {
   xg: Xg;
 };
 
 const XgCharts = ({ xg }: xGChartsProps) => {
+  const { t } = useTranslation();
   return (
-    <Stack gap={12} fullWidth>
+    <Stack gap={5} fullWidth>
       <DualSeries
-        title="xG For (last 5)"
-        homeLabel="HOME"
-        awayLabel="AWAY"
+        title={t('fixture.xgForLast5')}
+        homeLabel={t('common.home').toUpperCase()}
+        awayLabel={t('common.away').toUpperCase()}
         homeAvg={xg.homeLast5ForAvg}
         awayAvg={xg.awayLast5ForAvg}
         home={toLineData(xg.homeLast5For)}
@@ -24,7 +26,7 @@ const XgCharts = ({ xg }: xGChartsProps) => {
       />
 
       <DualSeries
-        title="xG Against (last 5)"
+        title={t('fixture.xgAgainstLast5')}
         homeLabel="HOME"
         awayLabel="AWAY"
         homeAvg={xg.homeLast5AgainstAvg}
@@ -39,4 +41,4 @@ const XgCharts = ({ xg }: xGChartsProps) => {
   );
 };
 
-export { XgCharts }
+export { XgCharts };

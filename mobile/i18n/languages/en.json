@@ -2,6 +2,8 @@
   "common": {
     "btts": "BTTS",
     "correct": "Correct",
+    "home": "Home",
+    "away": "Away",
     "incorrect": "Incorrect",
     "loading": "Loading…"
   },
@@ -21,7 +23,11 @@
     "highlighted": "Highlighted"
   },
   "fixture": {
-    "scoreOutlook": "Score outlook"
+    "scoreOutlook": "Outlook",
+    "conflictWarning": "Most likely score does not match our pick",
+    "expectedGoals": "expected goals",
+    "xgForLast5": "xG for (last 5)",
+    "xgAgainstLast5": "xG against (last 5)"
   },
   "performance": {
     "modelPerformance": "Model Performance",

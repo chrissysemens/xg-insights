@@ -11,15 +11,17 @@ import {
   Fixture,
   Goals,
   HighlightReason,
-  Pagination,
+  Market1x2,
+  MarketProbs1x2,
+  Odds1x2Triple,
   Participant,
   Pick,
   PredictBatchResponse,
+  RawPagination,
   ResultPick,
+  SportMonksOdd,
 } from "../types";
 import { numOrNull } from "./math";
-import { OddsSnapshot } from "../types";
-import { impliedFromDecimal } from "../utils/math";
 
 /**
  * Returns whether both teams scored in a match.
@@ -364,6 +366,37 @@ export const computeHighlightMeta = (
 };
 
 /**
+ * Computes the probabilities for the 1x2 market based on decimal odds.
+ * @param decimal - Decimal odds for home, draw, and away
+ * @returns - MarketProbs1x2 object or null if computation fails
+ */
+export const computeMarketProbs1x2 = (
+  decimal?: Partial<Odds1x2Triple> | null,
+): MarketProbs1x2 | null => {
+  const h = typeof decimal?.home === "number" ? decimal.home : null;
+  const d = typeof decimal?.draw === "number" ? decimal.draw : null;
+  const a = typeof decimal?.away === "number" ? decimal.away : null;
+
+  // require all 3 for 1x2
+  if (h == null || d == null || a == null) return null;
+  if (h <= 1 || d <= 1 || a <= 1) return null;
+
+  const pH = 1 / h;
+  const pD = 1 / d;
+  const pA = 1 / a;
+
+  const sum = pH + pD + pA;
+  if (!Number.isFinite(sum) || sum <= 0) return null;
+
+  return {
+    home: pH / sum,
+    draw: pD / sum,
+    away: pA / sum,
+    overround: sum,
+  };
+};
+
+/**
  * Returns the final score from a fixture object.
  * @param fx - Fixture object containing home and away goals
  * @returns - Object with homeGoals (hg) and awayGoals (ag), or null if not available
@@ -591,10 +624,20 @@ export const getFinalScore = (scores: any[]) => {
  * @param json - API response object
  * @returns - Pagination object or null if not found
  */
-export const getPagination = (json: any): Pagination | null => {
-  return (json?.pagination ??
-    json?.meta?.pagination ??
-    null) as Pagination | null;
+export const getPagination = (json: any): RawPagination | null => {
+  const p = json?.pagination ?? json?.meta?.pagination ?? json?.meta ?? null;
+  if (!p) return null;
+
+  return {
+    has_more: typeof p.has_more === "boolean" ? p.has_more : undefined,
+    current_page:
+      Number(
+        p.current_page ?? p.currentPage ?? p.page ?? json?.meta?.current_page,
+      ) || undefined,
+    last_page: Number(p.last_page ?? p.lastPage) || undefined,
+    total_pages:
+      Number(p.total_pages ?? p.totalPages ?? p.totalPages) || undefined,
+  };
 };
 
 /**
@@ -620,62 +663,92 @@ export const isFinished = (shortName?: string) => {
   return FINISHED_STATES.has(shortName);
 };
 
+const toDecimal = (n: unknown): number | null => {
+  const v = typeof n === "string" ? Number(n) : typeof n === "number" ? n : NaN;
+  return Number.isFinite(v) && v > 1.0 ? v : null;
+};
+
 /**
  * Normalises 1X2 odds from various formats into a standard structure.
  * @param odds - unknown[] | undefined | null
  * @returns - OddsSnapshot | null
  */
 export const normalise1x2Odds = (
-  odds: unknown[] | undefined | null,
-): OddsSnapshot | null => {
-  if (!Array.isArray(odds) || odds.length === 0) return null;
+  odds: SportMonksOdd[] | null | undefined,
+): Market1x2 | null => {
+  if (!odds?.length) return null;
 
-  let home: number | null = null;
-  let draw: number | null = null;
-  let away: number | null = null;
+  // Market 1: Full time result
+  const ft = odds.filter((o) => o.market_id === 1 && !o.stopped);
+  if (!ft.length) return null;
 
-  for (const o of odds) {
-    const obj: any = o;
-
-    const label = String(
-      obj?.label ??
-        obj?.name ??
-        obj?.market_description ??
-        obj?.type ??
-        obj?.outcome ??
-        "",
-    )
-      .toLowerCase()
-      .trim();
-
-    const value =
-      oddsToDecimal(obj?.value) ??
-      oddsToDecimal(obj?.odd) ??
-      oddsToDecimal(obj?.odds) ??
-      null;
-
-    if (!value) continue;
-
-    if (label === "1" || label.includes("home"))
-      home = Math.max(home ?? 0, value);
-    else if (label === "x" || label.includes("draw"))
-      draw = Math.max(draw ?? 0, value);
-    else if (label === "2" || label.includes("away"))
-      away = Math.max(away ?? 0, value);
+  // Group by bookmaker
+  const byBook = new Map<number, SportMonksOdd[]>();
+  for (const o of ft) {
+    byBook.set(o.bookmaker_id, [...(byBook.get(o.bookmaker_id) ?? []), o]);
   }
 
-  if (home == null && draw == null && away == null) return null;
+  let best: {
+    bookmakerId: number;
+    updatedAt: string | null;
+    items: SportMonksOdd[];
+  } | null = null;
+
+  for (const [bookmakerId, items] of byBook) {
+    const home = items.find((i) => normaliseLabel(i.label) === "home");
+    const draw = items.find((i) => normaliseLabel(i.label) === "draw");
+    const away = items.find((i) => normaliseLabel(i.label) === "away");
+    if (!home || !draw || !away) continue;
+
+    const updatedAt =
+      items
+        .map((i) => i.latest_bookmaker_update ?? null)
+        .filter(Boolean)
+        .sort()
+        .slice(-1)[0] ?? null;
+
+    if (!best) best = { bookmakerId, updatedAt, items };
+    else {
+      if ((updatedAt ?? "") > (best.updatedAt ?? ""))
+        best = { bookmakerId, updatedAt, items };
+    }
+  }
+
+  if (!best) return null;
+
+  const items = best.items;
+  const homeOdd = toDecimal(
+    items.find((i) => normaliseLabel(i.label) === "home")?.value,
+  );
+  const drawOdd = toDecimal(
+    items.find((i) => normaliseLabel(i.label) === "draw")?.value,
+  );
+  const awayOdd = toDecimal(
+    items.find((i) => normaliseLabel(i.label) === "away")?.value,
+  );
+
+  if (!homeOdd || !drawOdd || !awayOdd) return null;
+
+  const pH = 1 / homeOdd;
+  const pD = 1 / drawOdd;
+  const pA = 1 / awayOdd;
+  const sum = pH + pD + pA;
 
   return {
     market: "1x2",
-    decimal: { home, draw, away },
-    implied: {
-      home: impliedFromDecimal(home),
-      draw: impliedFromDecimal(draw),
-      away: impliedFromDecimal(away),
-    },
+    bookmakerId: best.bookmakerId,
+    updatedAt: best.updatedAt,
+    decimal: { home: homeOdd, draw: drawOdd, away: awayOdd },
+    implied: { home: pH / sum, draw: pD / sum, away: pA / sum },
   };
 };
+
+/**
+ * Normalises a label by trimming whitespace and converting to lowercase.
+ * @param s - label string
+ * @returns - normalised label
+ */
+const normaliseLabel = (s: string) => s.trim().toLowerCase();
 
 /**
  * Converts SportsMonks odds to decimal odds.
