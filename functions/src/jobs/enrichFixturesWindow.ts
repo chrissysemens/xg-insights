@@ -3,20 +3,19 @@ import { ENV } from "../config";
 import { computeTeamStats } from "../features/teamStats";
 import { buildFeatures, fetchH2H } from "../utils/helpers";
 
-/**
- * Enrich fixtures in fixtures_live with ML features
- * @param token - SportMonks API token
- * @returns - void
- */
-export const enrichFixturesWindow = async(token: string) => {
+const FEATURES_VERSION = 1;
+const REENRICH_AFTER_MINUTES = 0;
+
+const minutesAgo = (mins: number) => Date.now() - mins * 60 * 1000;
+
+export const enrichFixturesWindow = async (token: string) => {
   const db = admin.firestore();
 
-  // Prefer inWindow fixtures
-  const snap = await db
+  let query: FirebaseFirestore.Query = db
     .collection("fixtures_live")
-    .where("inWindow", "==", true)
-    .limit(ENV.FEATURES.ENRICH_LIMIT)
-    .get();
+    .where("inWindow", "==", true);
+
+  const snap = await query.limit(ENV.FEATURES.ENRICH_LIMIT).get();
 
   if (snap.empty) {
     console.log("enrichFixturesWindow: no inWindow fixtures");
@@ -49,14 +48,23 @@ export const enrichFixturesWindow = async(token: string) => {
 
   let enriched = 0;
   let skippedMissingTeams = 0;
+  let skippedFresh = 0;
 
   for (const docSnap of snap.docs) {
     const fx = docSnap.data() as any;
-    const { homeTeamId, awayTeamId } = fx;
 
+    const { homeTeamId, awayTeamId } = fx;
     if (!homeTeamId || !awayTeamId) {
       skippedMissingTeams++;
       continue;
+    }
+
+    if (REENRICH_AFTER_MINUTES > 0 && fx.lastEnrichedAt?.toMillis) {
+      const tsMs = fx.lastEnrichedAt.toMillis();
+      if (tsMs > minutesAgo(REENRICH_AFTER_MINUTES)) {
+        skippedFresh++;
+        continue;
+      }
     }
 
     const [homeStats, awayStats, h2h] = await Promise.all([
@@ -67,7 +75,6 @@ export const enrichFixturesWindow = async(token: string) => {
 
     const { features, derived } = buildFeatures(fx, homeStats, awayStats);
 
-    // Write ML features into fixture doc
     batch.set(
       docSnap.ref,
       {
@@ -77,6 +84,7 @@ export const enrichFixturesWindow = async(token: string) => {
           away: awayStats,
           derived,
         },
+        featuresVersion: FEATURES_VERSION,
         lastEnrichedAt: admin.firestore.FieldValue.serverTimestamp(),
       },
       { merge: true },
@@ -84,7 +92,6 @@ export const enrichFixturesWindow = async(token: string) => {
     operations++;
     enriched++;
 
-    // Write Enrichment details for UI into fixture_details
     batch.set(
       db.collection("fixture_details").doc(docSnap.id),
       {
@@ -120,4 +127,4 @@ export const enrichFixturesWindow = async(token: string) => {
   }
 
   if (operations > 0) await batch.commit();
-}
+};

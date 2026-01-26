@@ -1,42 +1,45 @@
 {
   "common": {
+    "away": "Away",
     "btts": "BTTS",
     "correct": "Correct",
     "home": "Home",
-    "away": "Away",
     "incorrect": "Incorrect",
     "loading": "Loading…"
   },
-  "home": {
-    "highlightedFixtures": "Highlighted fixtures",
-    "topPicksDescription": "Top picks from the latest model run (next 5 days)",
-    "loadingHighlights": "Loading highlights…",
-    "error": "Error: {{error}}",
-    "matchWinners": "Match Result",
-    "goalsAndBtts": "Goals & BTTS",
-    "over25": "Over 2.5",
-    "btts": "BTTS",
-    "resultConfidence": "{{conf}}% result confidence",
-    "matchWinner": "Match winner",
-    "highGoals": "High goals",
-    "bttsLikely": "BTTS likely",
-    "highlighted": "Highlighted"
-  },
   "fixture": {
-    "scoreOutlook": "Outlook",
     "conflictWarning": "Most likely score does not match our pick",
     "expectedGoals": "expected goals",
-    "xgForLast5": "xG for (last 5)",
-    "xgAgainstLast5": "xG against (last 5)"
+    "scoreOutlook": "Outlook",
+    "xgAgainstLast5": "xG against (last 5)",
+    "xgForLast5": "xG for (last 5)"
+  },
+  "home": {
+    "btts": "BTTS",
+    "bttsLikely": "BTTS likely",
+    "error": "Error: {{error}}",
+    "explore": "Explore",
+    "goalsAndBtts": "Goals & BTTS",
+    "highGoals": "High goals",
+    "highlighted": "Highlighted",
+    "highlightedFixtures": "Highlighted fixtures",
+    "interesting": "Interesting",
+    "loadingHighlights": "Loading highlights…",
+    "matchWinner": "Match winner",
+    "matchWinners": "Match Result",
+    "over25": "Over 2.5",
+    "resultConfidence": "{{conf}}% result confidence",
+    "strongSignals": "Strong signals",
+    "topPicksDescription": "Top picks from the latest model run (next 5 days)"
   },
   "performance": {
     "modelPerformance": "Model Performance",
-    "performanceDescription": "Overview of the model's prediction accuracy over time.",
-    "overTime": "Performance over time",
-    "weeklyAccuracy": "Weekly accuracy (%)",
-    "overallAccuracy": "Overall accuracy",
     "noPredictions": "No predictions",
-    "over25Goals": "Over 2.5 goals"
+    "over25Goals": "Over 2.5 goals",
+    "overTime": "Performance over time",
+    "overallAccuracy": "Overall accuracy",
+    "performanceDescription": "Overview of the model's prediction accuracy over time.",
+    "weeklyAccuracy": "Weekly accuracy (%)"
   },
   "routes": {
     "about": "About",

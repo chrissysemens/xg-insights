@@ -22,13 +22,11 @@ export async function evaluateArchivedPredictionsWindow() {
     .get();
 
   if (snap.empty) {
-    // No work to do
     return;
   }
 
   const fixtureIds = snap.docs.map((d) => d.id);
 
-  // Predictions are stored by fixtureId (doc id) in predictions_live
   const predRefs = fixtureIds.map((id) =>
     db.collection("predictions_live").doc(id),
   );
@@ -49,7 +47,6 @@ export async function evaluateArchivedPredictionsWindow() {
     const pred = predsById.get(fixtureId);
     const score = extractFinalScoreFromFixture(fx);
 
-    // If we can’t evaluate, record why (and allow retry later)
     if (!score) {
       batch.update(fxDoc.ref, {
         evaluationLastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -115,7 +112,6 @@ export async function evaluateArchivedPredictionsWindow() {
 
     operations++;
 
-    // Firestore batch limit is 500 writes, keep margin
     if (operations >= 450) {
       await batch.commit();
       batch = db.batch();

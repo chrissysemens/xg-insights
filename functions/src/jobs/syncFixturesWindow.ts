@@ -28,13 +28,11 @@ export async function syncFixturesWindow(token: string) {
   const windowStartStr = formatDateUTC(windowStart);
   const windowEndStr = formatDateUTC(windowEnd);
 
-  // Sports monks includes:
   const include = "state;participants;odds;league;scores";
 
   const seenTeams = new Set<number>();
   const seenFixtureIds = new Set<string>();
 
-  // Excluded competitions:
   const ALLOWED_LEAGUE_IDS = new Set<number>([
     8, 9, 72, 82, 181, 208, 244, 271, 301, 384, 387, 444, 453, 462, 501, 564,
     567, 573, 591, 600,
@@ -90,7 +88,6 @@ export async function syncFixturesWindow(token: string) {
     let operations = 0;
 
     for (const f of fixtures) {
-      // Filter leagues
       if (!ALLOWED_LEAGUE_IDS.has(f.league_id)) {
         continue;
       }
@@ -103,11 +100,9 @@ export async function syncFixturesWindow(token: string) {
       const participants = f.participants ?? [];
       const mapped = extractHomeAway(participants);
       if (!mapped) {
-        // Missing home/away info: skip
         continue;
       }
 
-      // Handle postponed fixtures: Remove from all
       if (short === "POSTPONED") {
         const liveRef = db.collection("fixtures_live").doc(fixtureId);
         const predRef = db.collection("predictions_live").doc(fixtureId);
@@ -127,15 +122,12 @@ export async function syncFixturesWindow(token: string) {
         continue;
       }
 
-      // Archive finished fixtures:
       if (!isFinished(short)) {
-        // keep NS-only in fixtures_live (your current rule)
         if (short && short !== "NS") {
           continue;
         }
       }
 
-      // Upsert teams (once per run per team)
       for (const t of [mapped.home, mapped.away]) {
         if (seenTeams.has(t.id)) continue;
         seenTeams.add(t.id);
@@ -222,7 +214,10 @@ export async function syncFixturesWindow(token: string) {
       }
 
       const oddsSnapshot = normalise1x2Odds(f.odds);
-      const marketProbs = computeMarketProbs1x2(oddsSnapshot?.decimal);
+
+      const marketProbs = oddsSnapshot?.decimal
+        ? computeMarketProbs1x2(oddsSnapshot.decimal)
+        : null;
 
       fixturePayload.odds = oddsSnapshot
         ? {
@@ -241,7 +236,6 @@ export async function syncFixturesWindow(token: string) {
       const detailsRef = db.collection("fixture_details").doc(fixtureId);
 
       if (isFinished(short)) {
-        // Archive finished fixtures
         batch.set(
           archRef,
           {
@@ -253,10 +247,8 @@ export async function syncFixturesWindow(token: string) {
           { merge: true },
         );
 
-        // Remove from live
         batch.delete(liveRef);
 
-        // Keep fixture details
         batch.set(
           detailsRef,
           {
@@ -284,11 +276,9 @@ export async function syncFixturesWindow(token: string) {
 
         operations += 3;
       } else {
-        // Fixtures live
         batch.set(liveRef, fixturePayload, { merge: true });
         operations++;
 
-        // Fixture details
         batch.set(
           detailsRef,
           {
@@ -326,7 +316,6 @@ export async function syncFixturesWindow(token: string) {
     if (fixtures.length === 0) hasMore = false;
   }
 
-  // Prune stale fixtures from live:
   const liveSnap = await db
     .collection("fixtures_live")
     .where("inWindow", "==", true)

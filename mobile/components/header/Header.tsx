@@ -1,13 +1,13 @@
-import { Image, Pressable } from "react-native";
-import { Row } from "@/layout/Row";
-import { Text } from "@/components";
-import { useTheme } from "@/theme/useTheme";
-import { useAppStore } from "@/state/useAppStore"; // adjust path
+import { Image, Pressable } from 'react-native';
+import { Row } from '@/layout/Row';
+import { Text } from '../text/Text';
+import { useTheme } from '@/theme/useTheme';
+import { useAppStore } from '@/state/useAppStore'; // adjust path
 
 const nextMode = {
-  system: "light",
-  light: "dark",
-  dark: "system",
+  system: 'light',
+  light: 'dark',
+  dark: 'system',
 } as const;
 
 const Header = () => {
@@ -29,14 +29,14 @@ const Header = () => {
       {/* Left: Logo + title */}
       <Row align="center" style={{ gap: theme.spacing[3] }}>
         <Image
-          source={require("@/assets/icon.png")}
+          source={require('@/assets/icon.png')}
           style={{ width: 28, height: 28 }}
           resizeMode="contain"
         />
         <Text
           style={{
             fontSize: 20,
-            fontWeight: "700",
+            fontWeight: '700',
             color: c.text,
           }}
         >
@@ -59,7 +59,7 @@ const Header = () => {
         <Text
           style={{
             fontSize: 12,
-            fontWeight: "600",
+            fontWeight: '600',
             color: c.text2,
           }}
         >

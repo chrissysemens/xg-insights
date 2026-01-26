@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { router } from 'expo-router';
 
 type Pick = 'H' | 'D' | 'A';
-type FixtureCardVariant = 'winner' | 'goals';
+type FixtureCardVariant = 'winner' | 'goals' | 'interesting';
 
 type FixtureCardProps = {
   fixtureId: string;
@@ -32,7 +32,11 @@ export const formatKickoff = (ts: number) => {
 };
 
 const getResultConf = (p: any) =>
-  Math.max(p?.matchResult?.H ?? 0, p?.matchResult?.D ?? 0, p?.matchResult?.A ?? 0);
+  Math.max(
+    p?.matchResult?.H ?? 0,
+    p?.matchResult?.D ?? 0,
+    p?.matchResult?.A ?? 0,
+  );
 
 const roundToNearest25 = (p: number) => Math.round(p / 2.5) * 2.5;
 
@@ -142,8 +146,12 @@ export const TeamsRow: React.FC<TeamsRowProps> = ({
           numberOfLines={1}
           style={{
             ...theme.typography.body,
-            ...(winnerColourEnabled ? teamStyle('home', pick, c) : { color: c.text }),
-            fontFamily: isHomePick ? theme.fontFamilies.bold : theme.fontFamilies.regular,
+            ...(winnerColourEnabled
+              ? teamStyle('home', pick, c)
+              : { color: c.text }),
+            fontFamily: isHomePick
+              ? theme.fontFamilies.bold
+              : theme.fontFamilies.regular,
             flexShrink: 1,
           }}
         >
@@ -168,8 +176,12 @@ export const TeamsRow: React.FC<TeamsRowProps> = ({
           numberOfLines={1}
           style={{
             ...theme.typography.body,
-            ...(winnerColourEnabled ? teamStyle('away', pick, c) : { color: c.text }),
-            fontFamily: isAwayPick ? theme.fontFamilies.bold : theme.fontFamilies.regular,
+            ...(winnerColourEnabled
+              ? teamStyle('away', pick, c)
+              : { color: c.text }),
+            fontFamily: isAwayPick
+              ? theme.fontFamilies.bold
+              : theme.fontFamilies.regular,
             flexShrink: 1,
             textAlign: 'right',
           }}

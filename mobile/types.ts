@@ -22,7 +22,7 @@ export type PredictionDoc = {
   btts: YnPick | null;
   highlighted: boolean;
   highlightScore?: number;
-  highlightReason?: HighlightReason;
+  highlightReason?: HighlightReason | null;
   generatedAt?: any;
 };
 

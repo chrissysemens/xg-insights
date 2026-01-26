@@ -1,19 +1,35 @@
 import * as admin from "firebase-admin";
 import { ENV } from "../config";
+import { PredictBatchRequest, PredictBatchResponse } from "../types";
 import {
-  PredictBatchRequest,
-  PredictBatchResponse,
-} from "../types";
-import { chunk, computeHighlightMeta, pickedResultProb, resultGap } from "../utils/helpers";
+  chunk,
+  computeHighlightMeta,
+  pickedResultProb,
+  resultGap,
+} from "../utils/helpers";
 import {
+  BATCH_SIZE,
   BTTS_HIGHLIGHT_MIN,
+  HIGHLIGHT_TOP_N,
   OVER25_HIGHLIGHT_MIN,
   RESULT_GAP_MIN,
   RESULT_HIGHLIGHT_MIN,
 } from "../consts";
 
-const BATCH_SIZE = 50;
-const HIGHLIGHT_TOP_N = 8;
+type MarketProbs1x2 = {
+  home: number;
+  draw: number;
+  away: number;
+  overround: number;
+};
+
+const isFiniteNum = (v: unknown): v is number =>
+  typeof v === "number" && Number.isFinite(v);
+
+const clampProbability = (v: unknown) => {
+  const n = isFiniteNum(v) ? v : 0;
+  return Math.max(0, Math.min(1, n));
+};
 
 export const runPredictionsWindow = async () => {
   if (!ENV.PREDICTOR.BASE_URL) {
@@ -23,7 +39,6 @@ export const runPredictionsWindow = async () => {
   const modelVersion = ENV.PREDICTOR.MODEL_VERSION;
   const db = admin.firestore();
 
-  // Scope: in-window + not started
   const qs = await db
     .collection("fixtures_live")
     .where("inWindow", "==", true)
@@ -34,6 +49,11 @@ export const runPredictionsWindow = async () => {
 
   const fixtures = qs.docs.map((d) => ({ docId: d.id, ...(d.data() as any) }));
 
+  const fixtureById = new Map<string, any>();
+  for (const f of fixtures) {
+    fixtureById.set(String(f.id ?? f.docId), f);
+  }
+
   const hasFeatures = (f: any) => !!(f.features ?? f.featuresV2);
 
   const candidates = fixtures
@@ -43,15 +63,11 @@ export const runPredictionsWindow = async () => {
     }))
     .filter((x) => !!x.features);
 
-  if (candidates.length === 0) {
-    // No work to do
-    return;
-  }
+  if (candidates.length === 0) return;
 
   const baseUrl = ENV.PREDICTOR.BASE_URL.replace(/\/+$/, "");
   const url = `${baseUrl}/predictBatch`;
 
-  // Run predictions in batches
   for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
     const slice = candidates.slice(i, i + BATCH_SIZE);
 
@@ -88,7 +104,6 @@ export const runPredictionsWindow = async () => {
 
       const meta = computeHighlightMeta(p);
 
-      // Compute highlight flags:  ClearWinner and (BTTS OR Over2.5)
       const bttsY = p.btts?.Y ?? 0;
       const overY = p.over25?.Y ?? 0;
 
@@ -106,40 +121,95 @@ export const runPredictionsWindow = async () => {
             : { kind: "btts", pick: "Y", prob: bttsY }
           : null;
 
-      // Clear favourite if MIN + GAP are met
       const fav = pickedResultProb(p);
       const gap = resultGap(p);
       const favQualified = fav >= RESULT_HIGHLIGHT_MIN && gap >= RESULT_GAP_MIN;
 
-      // Qualified: If a goals badge qualifies OR a genuinely clear favourite qualifies
       const qualified = favQualified || !!goalsPick;
+
+      const fx = fixtureById.get(fixtureId);
+      const market: MarketProbs1x2 | null =
+        (fx?.odds?.market1x2?.marketProbs as MarketProbs1x2 | null) ?? null;
+
+      const INTERESTING_THRESHOLD = 0.08; // 8pp
+      const MAX_OVERROUND = 1.18;
+
+      const modelH = clampProbability(p.matchResult?.H);
+      const modelD = clampProbability(p.matchResult?.D);
+      const modelA = clampProbability(p.matchResult?.A);
+
+      const canUseMarket =
+        !!market &&
+        isFiniteNum(market.home) &&
+        isFiniteNum(market.draw) &&
+        isFiniteNum(market.away) &&
+        isFiniteNum(market.overround) &&
+        market.overround > 0 &&
+        market.overround <= MAX_OVERROUND;
+
+      const deltaHome = canUseMarket ? modelH - market.home : null;
+      const deltaDraw = canUseMarket ? modelD - market.draw : null;
+      const deltaAway = canUseMarket ? modelA - market.away : null;
+
+      const best = canUseMarket
+        ? [
+            { key: "home" as const, delta: deltaHome! },
+            { key: "draw" as const, delta: deltaDraw! },
+            { key: "away" as const, delta: deltaAway! },
+          ].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))[0]
+        : null;
+
+      const interesting =
+        !favQualified &&
+        !!best &&
+        Math.abs(best.delta) >= INTERESTING_THRESHOLD;
+
+      const interestingMeta = interesting
+        ? {
+            bestKey: best!.key,
+            bestDelta: best!.delta,
+            deltaHome,
+            deltaDraw,
+            deltaAway,
+            threshold: INTERESTING_THRESHOLD,
+            overround: market!.overround,
+          }
+        : null;
+
+      const tags = {
+        clearFavourite: favQualified,
+        goals: !!goalsPick,
+        interesting,
+      };
 
       const predictionBlock = {
         modelVersion: json.modelVersion,
         matchResult: p.matchResult,
         over25: p.over25 ?? null,
         btts: p.btts ?? null,
-        qualified, // For UI filtering
-        goalsPick, // UI badge info
+
+        qualified,
+        goalsPick,
+
         resultGap: gap,
         highlightScore: meta.highlightScore,
         highlightReason: meta.highlightReason,
-        highlighted: false, // updated later
+        highlighted: false,
+        tags,
+        interestingMeta,
+
         generatedAt: admin.firestore.FieldValue.serverTimestamp(),
       };
 
-      // Write into predictions_live (raw data)
+      // predictions_live (raw)
       writeBatch.set(
         predRef,
-        {
-          fixtureId,
-          ...predictionBlock,
-        },
+        { fixtureId, ...predictionBlock },
         { merge: true },
       );
       ops++;
 
-      // Also write into fixture_details (denormalised for UI)
+      // fixture_details (UI doc)
       writeBatch.set(
         detailsRef,
         {
@@ -161,7 +231,6 @@ export const runPredictionsWindow = async () => {
     if (ops > 0) await writeBatch.commit();
   }
 
-  // Select top N highlights and update highlighted flags in BOTH places ---
   const fixtureIdsInScope = fixtures
     .filter(hasFeatures)
     .map((f) => String(f.id ?? f.docId));
@@ -175,7 +244,6 @@ export const runPredictionsWindow = async () => {
     predDocs.push(...pq.docs);
   }
 
-  // Only allow qualified picks to compete for "top N"
   const scored = predDocs
     .map((d) => {
       const data = d.data() as any;
@@ -194,21 +262,17 @@ export const runPredictionsWindow = async () => {
   let highlightBatch = db.batch();
   let operations = 0;
 
-  // Write highlighted false for all other docs
-  const allInScope = predDocs.map((d) => ({ ref: d.ref, fixtureId: d.id }));
+  for (const d of predDocs) {
+    const fixtureId = d.id;
+    const isHighlighted = top.has(fixtureId);
 
-  for (const s of allInScope) {
-    const isHighlighted = top.has(s.fixtureId);
-
-    // predictions_live
-    highlightBatch.set(s.ref, { highlighted: isHighlighted }, { merge: true });
+    highlightBatch.set(d.ref, { highlighted: isHighlighted }, { merge: true });
     operations++;
 
-    // fixture_details mirror flag
-    const detailsRef = db.collection("fixture_details").doc(s.fixtureId);
+    const detailsRef = db.collection("fixture_details").doc(fixtureId);
     highlightBatch.set(
       detailsRef,
-      { prediction: { highlighted: isHighlighted } },
+      { "prediction.highlighted": isHighlighted },
       { merge: true },
     );
     operations++;
@@ -221,4 +285,4 @@ export const runPredictionsWindow = async () => {
   }
 
   if (operations > 0) await highlightBatch.commit();
-}
+};

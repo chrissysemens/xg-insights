@@ -96,3 +96,4 @@ const XgTotals = ({ fixture, market1x2 }: xgTotalsProps) => {
 };
 
 export { XgTotals };
+

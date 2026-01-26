@@ -29,6 +29,33 @@ export type Fixture = {
   };
 };
 
+export type FormLetter = "W" | "D" | "L";
+
+export type Goals = { homeGoals: number; awayGoals: number };
+
+export type HighlightReason =
+  | "HIGH_GOALS"
+  | "BTTS_LIKELY"
+  | "CLEAR_FAVOURITE";
+
+export type InterestingMeta = {
+  side: "home" | "draw" | "away";
+  delta: number;
+  deltaAbs: number;
+  market: { home: number; draw: number; away: number; overround: number };
+  model: { home: number; draw: number; away: number };
+};
+
+export type Location = "home" | "away";
+
+export type Market1x2 = {
+  market: "1x2";
+  decimal: Odds1x2;
+  implied: Odds1x2;
+  bookmakerId: number;
+  updatedAt?: string | null;
+};
+
 export type RawPagination = {
   has_more?: boolean;
   current_page?: number;
@@ -40,42 +67,20 @@ export type RawPagination = {
 export type SportMonksOdd = {
   market_id: number;
   bookmaker_id: number;
-  label: string; // "Home" | "Draw" | "Away" etc
+  label: string;
   value: string | number | null;
   stopped?: boolean;
   latest_bookmaker_update?: string | null;
 };
 
-export type Market1x2 = {
-  market: "1x2";
-  decimal: Odds1x2Triple;
-  implied: Odds1x2Triple;
-  bookmakerId: number;
-  updatedAt?: string | null;
-};
-
-export type FormLetter = "W" | "D" | "L";
-
-export type Goals = { homeGoals: number; awayGoals: number };
-
-export enum HighlightReason {
-  HIGH_GOALS = "HIGH_GOALS",
-  BTTS_LIKELY = "BTTS_LIKELY",
-  CLEAR_FAVOURITE = "CLEAR_FAVOURITE",
-}
-
-export type Location = "home" | "away";
-
-export type Odds1x2Triple = { home: number; draw: number; away: number };
-
 export type MarketProbs1x2 = {
   home: number;
   draw: number;
   away: number;
-  overround: number; // sum of raw implieds
+  overround: number;
 };
 
-export type Odds1X2 = {
+export type Odds1x2 = {
   home: number | null;
   draw: number | null;
   away: number | null;
@@ -83,7 +88,7 @@ export type Odds1X2 = {
 
 export type OddsSnapshot = {
   market: "1x2";
-  decimal: Odds1X2;
+  decimal: Odds1x2;
   implied: { home: number | null; draw: number | null; away: number | null };
 };
 

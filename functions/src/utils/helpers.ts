@@ -2,6 +2,8 @@ import { ENV } from "../config";
 import {
   BTTS_HIGHLIGHT_MIN,
   FINISHED_STATES,
+  INTERESTING_DELTA_MIN,
+  INTERESTING_MAX_OVERROUND,
   OVER25_HIGHLIGHT_MIN,
   RESULT_GAP_MIN,
   RESULT_HIGHLIGHT_MIN,
@@ -11,9 +13,10 @@ import {
   Fixture,
   Goals,
   HighlightReason,
+  InterestingMeta,
   Market1x2,
   MarketProbs1x2,
-  Odds1x2Triple,
+  Odds1x2,
   Participant,
   Pick,
   PredictBatchResponse,
@@ -317,16 +320,84 @@ export const chunk = <T>(arr: T[], size: number): T[][] => {
 };
 
 /**
+ *  Normalises a probability to be within the range [0, 1].
+ * @param p  - Input probability
+ * @returns - Normalised probability
+ */
+export const normaliseProbability = (p: number) => Math.max(0, Math.min(1, p));
+
+/**
+ * Computes interesting metadata for a prediction based on model and market probabilities.
+ * @param args - Object containing model and market probabilities
+ * @returns - InterestingMeta object or null if not interesting
+ */
+export const computeInterestingMeta = (args: {
+  model?: { H?: number; D?: number; A?: number } | null;
+  market?: {
+    home?: number;
+    draw?: number;
+    away?: number;
+    overround?: number;
+  } | null;
+}): InterestingMeta | null => {
+  const m = args.model;
+  const mk = args.market;
+
+  if (!m || !mk) return null;
+
+  const marketHome = mk.home;
+  const marketDraw = mk.draw;
+  const marketAway = mk.away;
+  const overround = mk.overround;
+
+  if (
+    typeof marketHome !== "number" ||
+    typeof marketDraw !== "number" ||
+    typeof marketAway !== "number" ||
+    typeof overround !== "number"
+  )
+    return null;
+
+  if (!Number.isFinite(overround) || overround <= 0) return null;
+  if (overround > INTERESTING_MAX_OVERROUND) return null;
+
+  const modelHome = normaliseProbability(m.H ?? 0);
+  const modelDraw = normaliseProbability(m.D ?? 0);
+  const modelAway = normaliseProbability(m.A ?? 0);
+
+  const dHome = modelHome - marketHome;
+  const dDraw = modelDraw - marketDraw;
+  const dAway = modelAway - marketAway;
+
+  const best = [
+    { side: "home" as const, delta: dHome },
+    { side: "draw" as const, delta: dDraw },
+    { side: "away" as const, delta: dAway },
+  ].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))[0];
+
+  const deltaAbs = Math.abs(best.delta);
+  if (deltaAbs < INTERESTING_DELTA_MIN) return null;
+
+  return {
+    side: best.side,
+    delta: best.delta,
+    deltaAbs,
+    market: { home: marketHome, draw: marketDraw, away: marketAway, overround },
+    model: { home: modelHome, draw: modelDraw, away: modelAway },
+  };
+};
+
+/**
  * Computes highlight metadata for a prediction.
- * @param p - Prediction object
- * @returns - Object containing highlight score and reason
+ * - If BTTS/Over qualifies, returns that.
+ * - If clear favourite qualifies (MIN + GAP), returns that.
+ * - Otherwise returns a fallback score for sorting, with `highlightReason: null`.
  */
 export const computeHighlightMeta = (
   p: PredictBatchResponse["predictions"][number],
 ) => {
   const candidates: Array<{ reason: HighlightReason; score: number }> = [];
 
-  // Exclusive goals highlight: either BTTS or Over2.5
   const bttsY = p.btts?.Y ?? 0;
   const overY = p.over25?.Y ?? 0;
 
@@ -334,27 +405,24 @@ export const computeHighlightMeta = (
   const overOk = p.over25?.pick === "Y" && overY >= OVER25_HIGHLIGHT_MIN;
 
   if (bttsOk || overOk) {
-    // Choose highest scoring
     if (overOk && (!bttsOk || overY >= bttsY)) {
-      candidates.push({ reason: HighlightReason.HIGH_GOALS, score: overY });
-    } else if (bttsOk) {
-      candidates.push({ reason: HighlightReason.BTTS_LIKELY, score: bttsY });
+      candidates.push({ reason: "HIGH_GOALS", score: overY });
+    } else {
+      candidates.push({ reason: "BTTS_LIKELY", score: bttsY });
     }
   }
 
-  // Favourite highlight: must pass MIN and be clearly separated by GAP
   const fav = pickedResultProb(p);
   const gap = resultGap(p);
 
   if (fav >= RESULT_HIGHLIGHT_MIN && gap >= RESULT_GAP_MIN) {
-    candidates.push({ reason: HighlightReason.CLEAR_FAVOURITE, score: fav });
+    candidates.push({ reason: "CLEAR_FAVOURITE", score: fav });
   }
 
-  // Fallback: always return something for sorting/scoring, even if unqualified
   if (candidates.length === 0) {
     return {
       highlightScore: fav,
-      highlightReason: HighlightReason.CLEAR_FAVOURITE,
+      highlightReason: null,
     };
   }
 
@@ -371,7 +439,7 @@ export const computeHighlightMeta = (
  * @returns - MarketProbs1x2 object or null if computation fails
  */
 export const computeMarketProbs1x2 = (
-  decimal?: Partial<Odds1x2Triple> | null,
+  decimal?: Partial<Odds1x2> | null,
 ): MarketProbs1x2 | null => {
   const h = typeof decimal?.home === "number" ? decimal.home : null;
   const d = typeof decimal?.draw === "number" ? decimal.draw : null;
