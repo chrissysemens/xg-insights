@@ -25,7 +25,7 @@ export default function Home() {
       { key: 'goals' as const, label: t('home.highGoals') || 'High goals' },
       {
         key: 'interesting' as const,
-        label: t('home.interesting') || 'Interesting',
+        label: t('home.value') || 'value',
       },
             {
         key: 'explore' as const,

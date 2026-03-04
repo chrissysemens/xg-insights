@@ -54,9 +54,7 @@ export const runPredictions = onSchedule(
     timeoutSeconds: 420,
   },
   async () => {
-    console.log("runPredictions: starting");
     await runPredictionsWindow();
-    console.log("runPredictions: done");
   },
 );
 

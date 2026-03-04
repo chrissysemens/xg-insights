@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Tuple
 
 import lightgbm as lgb
 import numpy as np
-from sklearn.metrics import accuracy_score, log_loss
+from sklearn.metrics import accuracy_score, balanced_accuracy_score, f1_score, log_loss
 from sklearn.model_selection import train_test_split
 
 from build_dataset import build_dataset
@@ -110,6 +110,49 @@ def print_ps_tips(script_name: str = "train_models.py") -> None:
     print('  $env:RUN_OVER25_XG_PRESENT_ONLY="1"; python ' + script_name)
     print('  $env:LOOSEN_BINARY_PARAMS="1"; python ' + script_name)
     print("  (Run from the folder that contains the script.)")
+
+
+def calibrate_binary_threshold(
+    y_true: np.ndarray,
+    y_prob: np.ndarray,
+    name: str,
+) -> Tuple[float, Dict[str, float]]:
+    y_true = np.asarray(y_true, dtype=int).reshape(-1)
+    y_prob = np.asarray(y_prob, dtype=float).reshape(-1)
+
+    best_t = 0.5
+    best_score = -1.0
+    best_bal_acc = 0.0
+    best_f1 = 0.0
+    best_acc = 0.0
+
+    for t in np.arange(0.30, 0.701, 0.01):
+        y_hat = (y_prob >= t).astype(int)
+        bal_acc = float(balanced_accuracy_score(y_true, y_hat))
+        f1 = float(f1_score(y_true, y_hat, zero_division=0))
+        acc = float(accuracy_score(y_true, y_hat))
+
+        score = bal_acc * 0.7 + f1 * 0.3
+        if score > best_score:
+            best_score = score
+            best_t = float(t)
+            best_bal_acc = bal_acc
+            best_f1 = f1
+            best_acc = acc
+
+    out = {
+        "balanced_accuracy": best_bal_acc,
+        "f1": best_f1,
+        "accuracy": best_acc,
+        "objective": best_score,
+    }
+
+    print(
+        f"{name} calibrated threshold={best_t:.2f} "
+        f"(bal_acc={best_bal_acc:.4f}, f1={best_f1:.4f}, acc={best_acc:.4f})"
+    )
+
+    return best_t, out
 
 
 def main():
@@ -357,6 +400,17 @@ def main():
     m_over25 = train_binary_custom("OVER25", X_train_all, X_val_all, yo_train, yo_val, feature_names)
     m_btts = train_binary_custom("BTTS", X_train_all, X_val_all, yb_train, yb_val, feature_names)
 
+    hdr("CALIBRATE BINARY THRESHOLDS (VALIDATION)")
+    over25_val_prob = m_over25.predict(X_val_all)
+    btts_val_prob = m_btts.predict(X_val_all)
+
+    over25_threshold, over25_metrics = calibrate_binary_threshold(
+        yo_val, over25_val_prob, "OVER25"
+    )
+    btts_threshold, btts_metrics = calibrate_binary_threshold(
+        yb_val, btts_val_prob, "BTTS"
+    )
+
     # Diagnostics: BTTS form-only
     if RUN_BTTS_FORM_ONLY:
         hdr("DIAGNOSTIC: BTTS FORM-ONLY (NO xG)")
@@ -416,6 +470,18 @@ def main():
     with open(os.path.join(model_dir, "feature_names.json"), "w", encoding="utf-8") as f:
         json.dump(feature_names, f)
 
+    thresholds_payload = {
+        "modelVersion": MODEL_VERSION,
+        "over25_threshold": over25_threshold,
+        "btts_threshold": btts_threshold,
+        "calibration": {
+            "over25": over25_metrics,
+            "btts": btts_metrics,
+        },
+    }
+    with open(os.path.join(model_dir, "thresholds.json"), "w", encoding="utf-8") as f:
+        json.dump(thresholds_payload, f, indent=2)
+
     # Save models (same filenames) + model_version info for debugging
     m_result.save_model(os.path.join(model_dir, "lgbm_result.txt"))
     m_over25.save_model(os.path.join(model_dir, "lgbm_over25.txt"))
@@ -426,6 +492,8 @@ def main():
 
     print("\nExport complete → cloudrun-predictor/model/")
     print(f"MODEL_VERSION: {MODEL_VERSION}")
+    print(f"Calibrated OVER25 threshold: {over25_threshold:.2f}")
+    print(f"Calibrated BTTS threshold:   {btts_threshold:.2f}")
     print("Next: rebuild + redeploy Cloud Run so /status shows modelsLoaded=true")
 
     print_ps_tips("train_models.py")

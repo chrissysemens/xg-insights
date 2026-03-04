@@ -11,7 +11,11 @@ export type YnPick = { Y: number; N: number; pick: Yn };
 
 export type Pick = { key: string; label: string };
 
+export type ResultPick = 'H' | 'D' | 'A';
+
 export type Scoreline = { h: number; a: number; p: number };
+
+export type FixtureCardVariant = 'winner' | 'goals' | 'interesting';
 
 export type PredictionDoc = {
   fixtureId: string;

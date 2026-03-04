@@ -129,7 +129,7 @@ export default function PerformanceScreen() {
                       data={over25Donut}
                       centerText={
                         result.total > 0
-                          ? `${over25.correct}/${over25.total}\n${pct(over25.correct, over25.total)}%`
+                          ? `${over25.correct}/${over25.total} ${pct(over25.correct, over25.total)}%`
                           : t('performance.noPredictions')
                       }
                     />
@@ -141,7 +141,7 @@ export default function PerformanceScreen() {
                       data={bttsDonut}
                       centerText={
                         result.total > 0
-                          ? `${btts.correct}/${btts.total}\n${pct(btts.correct, btts.total)}%`
+                          ? `${btts.correct}/${btts.total} ${pct(btts.correct, btts.total)}%`
                           : t('performance.noPredictions')
                       }
                     />

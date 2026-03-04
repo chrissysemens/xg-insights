@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { setTimeout as sleep } from "node:timers/promises";
 import { ENV } from "../config";
 import { PredictBatchRequest, PredictBatchResponse } from "../types";
 import {
@@ -31,7 +32,73 @@ const clampProbability = (v: unknown) => {
   return Math.max(0, Math.min(1, n));
 };
 
+const isRetryableStatus = (status: number) => {
+  return status === 408 || status === 429 || (status >= 500 && status <= 599);
+};
+
+const postPredictBatch = async (
+  url: string,
+  payload: PredictBatchRequest,
+): Promise<PredictBatchResponse> => {
+  const maxAttempts = 4;
+  const baseDelayMs = 800;
+
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25_000);
+
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json",
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        const msg = `Cloud Run error ${res.status}: ${text.slice(0, 500)}`;
+
+        if (attempt < maxAttempts && isRetryableStatus(res.status)) {
+          const retryAfter = Number(res.headers.get("retry-after"));
+          const waitMs = Number.isFinite(retryAfter)
+            ? retryAfter * 1000
+            : baseDelayMs * Math.pow(2, attempt - 1);
+          await sleep(waitMs);
+          continue;
+        }
+
+        throw new Error(msg);
+      }
+
+      return (await res.json()) as PredictBatchResponse;
+    } catch (e) {
+      lastError = e;
+      const isAbort = (e as any)?.name === "AbortError";
+      const isNetworkTypeError = e instanceof TypeError;
+
+      if (attempt < maxAttempts && (isAbort || isNetworkTypeError)) {
+        const waitMs = baseDelayMs * Math.pow(2, attempt - 1);
+        await sleep(waitMs);
+        continue;
+      }
+
+      throw e;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+};
+
 export const runPredictionsWindow = async () => {
+  const startedAtMs = Date.now();
   if (!ENV.PREDICTOR.BASE_URL) {
     throw new Error("Missing ENV.PREDICTOR.BASE_URL");
   }
@@ -39,15 +106,56 @@ export const runPredictionsWindow = async () => {
   const modelVersion = ENV.PREDICTOR.MODEL_VERSION;
   const db = admin.firestore();
 
-  const qs = await db
-    .collection("fixtures_live")
-    .where("inWindow", "==", true)
-    .where("state.shortName", "==", "NS")
-    .orderBy("startingAtTimestamp", "asc")
-    .limit(200)
-    .get();
+  const fixtures: any[] = [];
+  const PAGE_SIZE = 200;
+  let pagesRead = 0;
+  let lastDoc: FirebaseFirestore.QueryDocumentSnapshot | null = null;
 
-  const fixtures = qs.docs.map((d) => ({ docId: d.id, ...(d.data() as any) }));
+  while (true) {
+    let query: FirebaseFirestore.Query = db
+      .collection("fixtures_live")
+      .where("inWindow", "==", true)
+      .where("state.shortName", "==", "NS")
+      .orderBy("startingAtTimestamp", "asc")
+      .limit(PAGE_SIZE);
+
+    if (lastDoc) {
+      query = query.startAfter(lastDoc);
+    }
+
+    const qs = await query.get();
+    if (qs.empty) {
+      break;
+    }
+
+    pagesRead++;
+
+    fixtures.push(
+      ...qs.docs.map((d) => ({ docId: d.id, ...(d.data() as any) })),
+    );
+
+    lastDoc = qs.docs[qs.docs.length - 1];
+    if (qs.size < PAGE_SIZE) {
+      break;
+    }
+  }
+
+  if (fixtures.length === 0) {
+    console.log("[runPredictionsWindow] done", {
+      durationMs: Date.now() - startedAtMs,
+      pagesRead,
+      fixturesInScope: 0,
+      candidates: 0,
+      missingFeatures: 0,
+      batchesAttempted: 0,
+      batchesFailed: 0,
+      predictionsReturned: 0,
+      qualified: 0,
+      highlightedTopN: 0,
+      staleHighlightedReset: 0,
+    });
+    return;
+  }
 
   const fixtureById = new Map<string, any>();
   for (const f of fixtures) {
@@ -63,12 +171,35 @@ export const runPredictionsWindow = async () => {
     }))
     .filter((x) => !!x.features);
 
-  if (candidates.length === 0) return;
+  const missingFeatures = fixtures.length - candidates.length;
+
+  if (candidates.length === 0) {
+    console.log("[runPredictionsWindow] done", {
+      durationMs: Date.now() - startedAtMs,
+      pagesRead,
+      fixturesInScope: fixtures.length,
+      candidates: 0,
+      missingFeatures,
+      batchesAttempted: 0,
+      batchesFailed: 0,
+      predictionsReturned: 0,
+      qualified: 0,
+      highlightedTopN: 0,
+      staleHighlightedReset: 0,
+    });
+    return;
+  }
 
   const baseUrl = ENV.PREDICTOR.BASE_URL.replace(/\/+$/, "");
   const url = `${baseUrl}/predictBatch`;
 
+  let batchesAttempted = 0;
+  let batchesFailed = 0;
+  let predictionsReturned = 0;
+  let qualifiedCount = 0;
+
   for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
+    batchesAttempted++;
     const slice = candidates.slice(i, i + BATCH_SIZE);
 
     const payload: PredictBatchRequest = {
@@ -76,22 +207,17 @@ export const runPredictionsWindow = async () => {
       items: slice,
     };
 
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      console.error(`Cloud Run error ${res.status}: ${text.slice(0, 500)}`);
+    let json: PredictBatchResponse;
+    try {
+      json = await postPredictBatch(url, payload);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`Cloud Run request failed: ${msg}`);
+      batchesFailed++;
       continue;
     }
 
-    const json = (await res.json()) as PredictBatchResponse;
+    predictionsReturned += json.predictions.length;
 
     let writeBatch = db.batch();
     let ops = 0;
@@ -126,6 +252,9 @@ export const runPredictionsWindow = async () => {
       const favQualified = fav >= RESULT_HIGHLIGHT_MIN && gap >= RESULT_GAP_MIN;
 
       const qualified = favQualified || !!goalsPick;
+      if (qualified) {
+        qualifiedCount++;
+      }
 
       const fx = fixtureById.get(fixtureId);
       const market: MarketProbs1x2 | null =
@@ -187,6 +316,8 @@ export const runPredictionsWindow = async () => {
         matchResult: p.matchResult,
         over25: p.over25 ?? null,
         btts: p.btts ?? null,
+        resultExplain: p.resultExplain ?? null,
+        resultBias: p.resultBias ?? null,
 
         qualified,
         goalsPick,
@@ -257,7 +388,84 @@ export const runPredictionsWindow = async () => {
     .filter((x) => x.qualified)
     .sort((a, b) => b.score - a.score);
 
+  const top8Summary = scored.slice(0, HIGHLIGHT_TOP_N).map((x) => {
+    const fx = fixtureById.get(x.fixtureId);
+    return {
+      fixtureId: x.fixtureId,
+      score: Number(x.score.toFixed(4)),
+      homeTeamId: fx?.homeTeamId ?? null,
+      awayTeamId: fx?.awayTeamId ?? null,
+      leagueId: fx?.leagueId ?? null,
+      kickoffTs: fx?.startingAtTimestamp ?? null,
+    };
+  });
+
+  const predById = new Map<string, any>(
+    predDocs.map((d) => [d.id, d.data() as any]),
+  );
+
+  const highlightedExplainTop3 = scored.slice(0, HIGHLIGHT_TOP_N).map((x) => {
+    const data = predById.get(x.fixtureId) ?? {};
+    const explainRows = Array.isArray(data.resultExplain)
+      ? data.resultExplain
+      : [];
+
+    const top3 = explainRows
+      .filter(
+        (row: any) =>
+          row &&
+          typeof row.feature === "string" &&
+          Number.isFinite(Number(row.contribution)),
+      )
+      .sort(
+        (a: any, b: any) =>
+          Math.abs(Number(b.contribution)) - Math.abs(Number(a.contribution)),
+      )
+      .slice(0, 3)
+      .map((row: any) => ({
+        feature: row.feature,
+        contribution: Number(Number(row.contribution).toFixed(5)),
+      }));
+
+    return {
+      fixtureId: x.fixtureId,
+      resultPick: data?.matchResult?.pick ?? null,
+      highlightReason: data?.highlightReason ?? null,
+      top3,
+    };
+  });
+
+  const teamFreq = new Map<number, number>();
+  for (const row of scored.slice(0, 20)) {
+    const fx = fixtureById.get(row.fixtureId);
+    const homeTeamId = Number(fx?.homeTeamId);
+    const awayTeamId = Number(fx?.awayTeamId);
+
+    if (Number.isFinite(homeTeamId)) {
+      teamFreq.set(homeTeamId, (teamFreq.get(homeTeamId) ?? 0) + 1);
+    }
+    if (Number.isFinite(awayTeamId)) {
+      teamFreq.set(awayTeamId, (teamFreq.get(awayTeamId) ?? 0) + 1);
+    }
+  }
+
+  const repeatedTeamsTop20 = Array.from(teamFreq.entries())
+    .map(([teamId, count]) => ({ teamId, count }))
+    .filter((x) => x.count > 1)
+    .sort((a, b) => b.count - a.count || a.teamId - b.teamId)
+    .slice(0, 12);
+
   const top = new Set(scored.slice(0, HIGHLIGHT_TOP_N).map((x) => x.fixtureId));
+
+  const currentlyHighlighted = await db
+    .collection("predictions_live")
+    .where("highlighted", "==", true)
+    .limit(500)
+    .get();
+
+  const staleHighlighted = currentlyHighlighted.docs.filter(
+    (d) => !top.has(d.id),
+  );
 
   let highlightBatch = db.batch();
   let operations = 0;
@@ -284,5 +492,47 @@ export const runPredictionsWindow = async () => {
     }
   }
 
+  for (const d of staleHighlighted) {
+    highlightBatch.set(d.ref, { highlighted: false }, { merge: true });
+    operations++;
+
+    const detailsRef = db.collection("fixture_details").doc(d.id);
+    highlightBatch.set(
+      detailsRef,
+      { "prediction.highlighted": false },
+      { merge: true },
+    );
+    operations++;
+
+    if (operations >= 450) {
+      await highlightBatch.commit();
+      highlightBatch = db.batch();
+      operations = 0;
+    }
+  }
+
   if (operations > 0) await highlightBatch.commit();
+
+  console.log(
+    "[runPredictionsWindow] highlightedExplainTop3",
+    JSON.stringify(highlightedExplainTop3),
+  );
+
+  console.log("[runPredictionsWindow] done", {
+    durationMs: Date.now() - startedAtMs,
+    pagesRead,
+    pageSize: PAGE_SIZE,
+    fixturesInScope: fixtures.length,
+    candidates: candidates.length,
+    missingFeatures,
+    batchesAttempted,
+    batchesFailed,
+    predictionsReturned,
+    qualified: qualifiedCount,
+    highlightedTopN: top.size,
+    staleHighlightedReset: staleHighlighted.length,
+    top8Summary,
+    highlightedExplainTop3,
+    repeatedTeamsTop20,
+  });
 };

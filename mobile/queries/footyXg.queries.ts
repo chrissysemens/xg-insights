@@ -49,7 +49,6 @@ export const useSeasons = (tournamentId?: number) => {
 };
 
 export const useFixtures = (seasonId?: number, params?: FixturesParams) => {
-  console.log('useFixtures called with seasonId:', seasonId, 'params:', params);
   return useQuery({
     queryKey: seasonId
       ? footballXgKeys.fixtures(seasonId, params ?? {})

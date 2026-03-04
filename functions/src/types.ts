@@ -1,3 +1,11 @@
+export type Candidate = {
+  side: Side;
+  delta: number;
+  modelProb: number;
+  marketProb: number;
+  valueScore: number;
+};
+
 export type FetchJSONOptions = {
   timeoutMs?: number;
   retries?: number;
@@ -33,13 +41,10 @@ export type FormLetter = "W" | "D" | "L";
 
 export type Goals = { homeGoals: number; awayGoals: number };
 
-export type HighlightReason =
-  | "HIGH_GOALS"
-  | "BTTS_LIKELY"
-  | "CLEAR_FAVOURITE";
+export type HighlightReason = "HIGH_GOALS" | "BTTS_LIKELY" | "CLEAR_FAVOURITE";
 
 export type InterestingMeta = {
-  side: "home" | "draw" | "away";
+  side: Side;
   delta: number;
   deltaAbs: number;
   market: { home: number; draw: number; away: number; overround: number };
@@ -124,7 +129,15 @@ export type PredictBatchResponse = {
     matchResult: { H: number; D: number; A: number; pick: ResultPick };
     over25?: { Y: number; N: number; pick: Pick };
     btts?: { Y: number; N: number; pick: Pick };
+    resultExplain?: Array<{
+      feature: string;
+      value: number;
+      contribution: number;
+    }>;
+    resultBias?: number;
   }>;
 };
 
 export type ResultPick = "H" | "D" | "A";
+
+export type Side = "home" | "draw" | "away";

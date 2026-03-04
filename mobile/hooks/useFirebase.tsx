@@ -49,7 +49,6 @@ export const useFirebase = <T extends DocumentData>({
         setError(null);
       },
       (err) => {
-        console.log('Firestore onSnapshot error:', err.code, err.message);
         setError(err);
         setLoading(false);
       },

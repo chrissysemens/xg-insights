@@ -27,8 +27,15 @@ export const HighlightList = ({
   const c = theme.colours;
 
   const res = useHighlightsForTab(tab, take);
-  console.log(res)
-  const items = res.data ?? [];
+  const items = (res.data ?? []).filter((item) => {
+    // Only show fixtures starting less than 2 hours ago or in the future
+    const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+    const now = Date.now();
+    return (
+      typeof item.fixture?.startingAtTimestamp === 'number' &&
+      item.fixture.startingAtTimestamp * 1000 >= now - TWO_HOURS_MS
+    );
+  });
 
   return (
     <Stack

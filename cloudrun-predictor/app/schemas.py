@@ -20,11 +20,18 @@ class BinaryOut(BaseModel):
     N: float
     pick: str
 
+class FeatureContributionOut(BaseModel):
+    feature: str
+    value: float
+    contribution: float
+
 class PredictionOut(BaseModel):
     fixtureId: str
     matchResult: MatchResultOut
     over25: Optional[BinaryOut] = None
     btts: Optional[BinaryOut] = None
+    resultExplain: Optional[List[FeatureContributionOut]] = None
+    resultBias: Optional[float] = None
 
 class PredictBatchResponse(BaseModel):
     modelVersion: str

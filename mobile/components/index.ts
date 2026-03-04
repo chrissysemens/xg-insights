@@ -2,7 +2,7 @@ export { Button } from './button/Button';
 export { Card } from './card/Card';
 export { Divider } from './divider/Divider';
 export { Dropdown } from './dropdown/Dropdown';
-export { FixtureCard } from './cards/FixtureCard';
+export { FixtureCard } from './cards/FixtureCard/FixtureCard';
 export { Header } from './header/Header';
 export { Input } from './input/Input';
 export { Spinner } from './spinner/Spinner';

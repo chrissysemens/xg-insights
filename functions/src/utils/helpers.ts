@@ -10,10 +10,10 @@ import {
 } from "../consts";
 import { fetchJSON, fixturesBetweenByTeam } from "../sportmonks/client";
 import {
+  Candidate,
   Fixture,
   Goals,
   HighlightReason,
-  InterestingMeta,
   Market1x2,
   MarketProbs1x2,
   Odds1x2,
@@ -26,31 +26,24 @@ import {
 } from "../types";
 import { numOrNull } from "./math";
 
+/* -------------------------------------------------------------------------- */
+/*                                   Basics                                   */
+/* -------------------------------------------------------------------------- */
+
 /**
  * Returns whether both teams scored in a match.
- * @param hg - home goals
- * @param ag - away goals
- * @returns - Pick ("Y" for yes, "N" for no)
  */
-export const actualBTTS = (hg: number, ag: number): Pick => {
-  return hg > 0 && ag > 0 ? "Y" : "N";
-};
+export const actualBTTS = (hg: number, ag: number): Pick =>
+  hg > 0 && ag > 0 ? "Y" : "N";
 
 /**
  * Returns whether the total goals scored is over 2.5.
- * @param hg - home goals
- * @param ag - away goals
- * @returns Pick ("Y" for yes, "N" for no)
  */
-export const actualOver25 = (hg: number, ag: number): Pick => {
-  return hg + ag >= 3 ? "Y" : "N";
-};
+export const actualOver25 = (hg: number, ag: number): Pick =>
+  hg + ag >= 3 ? "Y" : "N";
 
 /**
  * Returns the actual match result based on home and away goals.
- * @param hg - home goals
- * @param ag  - away goals
- * @returns - ResultPick ("H", "D", or "A")
  */
 export const actualResult = (hg: number, ag: number): ResultPick => {
   if (hg > ag) return "H";
@@ -59,11 +52,18 @@ export const actualResult = (hg: number, ag: number): ResultPick => {
 };
 
 /**
- *Builds ML feature set for a fixture based on team statistics.
- * @param fx - Fixture object
- * @param homeStats - Home team statistics
- * @param awayStats - Away team statistics
- * @returns - Object containing features and derived statistics
+ * Normalises a probability to be within the range [0, 1].
+ */
+export const normaliseProbability = (p: number) => Math.max(0, Math.min(1, p));
+
+const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
+
+/* -------------------------------------------------------------------------- */
+/*                           Feature Engineering (ML)                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Builds ML feature set for a fixture based on team statistics.
  */
 export const buildFeatures = (fx: any, homeStats: any, awayStats: any) => {
   const homeForm5 = homeStats?.form5 ?? {};
@@ -92,6 +92,21 @@ export const buildFeatures = (fx: any, homeStats: any, awayStats: any) => {
       homeForm5.goalsAgainstAvg5 != null && awayForm5.goalsAgainstAvg5 != null
         ? Number(homeForm5.goalsAgainstAvg5) -
           Number(awayForm5.goalsAgainstAvg5)
+        : null,
+
+    // gaps (5) - weighted
+    pointsGapW5:
+      homeForm5.pointsWAvg5 != null && awayForm5.pointsWAvg5 != null
+        ? Number(homeForm5.pointsWAvg5) - Number(awayForm5.pointsWAvg5)
+        : null,
+    goalForGapW5:
+      homeForm5.goalsForWAvg5 != null && awayForm5.goalsForWAvg5 != null
+        ? Number(homeForm5.goalsForWAvg5) - Number(awayForm5.goalsForWAvg5)
+        : null,
+    goalsAgainstGapW5:
+      homeForm5.goalsAgainstWAvg5 != null && awayForm5.goalsAgainstWAvg5 != null
+        ? Number(homeForm5.goalsAgainstWAvg5) -
+          Number(awayForm5.goalsAgainstWAvg5)
         : null,
 
     homeSample5: numOrNull(homeForm5.matches),
@@ -280,6 +295,9 @@ export const buildFeatures = (fx: any, homeStats: any, awayStats: any) => {
     derived_pointsGap5: numOrNull(derived.pointsGap5),
     derived_goalForGap5: numOrNull(derived.goalForGap5),
     derived_goalsAgainstGap5: numOrNull(derived.goalsAgainstGap5),
+    derived_pointsGapW5: numOrNull(derived.pointsGapW5),
+    derived_goalForGapW5: numOrNull(derived.goalForGapW5),
+    derived_goalsAgainstGapW5: numOrNull(derived.goalsAgainstGapW5),
     derived_homeSample5: numOrNull(derived.homeSample5),
     derived_awaySample5: numOrNull(derived.awaySample5),
 
@@ -306,11 +324,12 @@ export const buildFeatures = (fx: any, homeStats: any, awayStats: any) => {
   return { features, derived };
 };
 
+/* -------------------------------------------------------------------------- */
+/*                                    Arrays                                  */
+/* -------------------------------------------------------------------------- */
+
 /**
  * Chunks an array into smaller arrays of a specified size.
- * @param arr - Original array
- * @param size - Size of each chunk
- * @returns - Array of chunked arrays
  */
 export const chunk = <T>(arr: T[], size: number): T[][] => {
   if (size <= 0) return [arr];
@@ -319,18 +338,34 @@ export const chunk = <T>(arr: T[], size: number): T[][] => {
   return out;
 };
 
-/**
- *  Normalises a probability to be within the range [0, 1].
- * @param p  - Input probability
- * @returns - Normalised probability
- */
-export const normaliseProbability = (p: number) => Math.max(0, Math.min(1, p));
+/* -------------------------------------------------------------------------- */
+/*                              Interesting (Value)                            */
+/* -------------------------------------------------------------------------- */
+
+type InterestingSide = "home" | "draw" | "away";
+
+export type InterestingMeta = {
+  bestKey: InterestingSide;
+  bestDelta: number; // model - market (positive means value)
+  valueScore: number; // ranking score
+  modelProb: number; // model prob for bestKey
+  marketProb: number; // market prob for bestKey
+  deltaHome: number;
+  deltaDraw: number;
+  deltaAway: number;
+  deltaAbs: number;
+  overround: number;
+  threshold: number;
+};
 
 /**
- * Computes interesting metadata for a prediction based on model and market probabilities.
- * @param args - Object containing model and market probabilities
- * @returns - InterestingMeta object or null if not interesting
+ * Tune these to taste.
+ * The goal: avoid "Barcelona 0.78" and avoid "1% miracles".
  */
+const INTERESTING_MODEL_MIN = 0.18;
+const INTERESTING_MODEL_MAX = 0.62;
+const INTERESTING_MARKET_MAX = 0.6;
+
 export const computeInterestingMeta = (args: {
   model?: { H?: number; D?: number; A?: number } | null;
   market?: {
@@ -342,7 +377,6 @@ export const computeInterestingMeta = (args: {
 }): InterestingMeta | null => {
   const m = args.model;
   const mk = args.market;
-
   if (!m || !mk) return null;
 
   const marketHome = mk.home;
@@ -361,30 +395,110 @@ export const computeInterestingMeta = (args: {
   if (!Number.isFinite(overround) || overround <= 0) return null;
   if (overround > INTERESTING_MAX_OVERROUND) return null;
 
-  const modelHome = normaliseProbability(m.H ?? 0);
-  const modelDraw = normaliseProbability(m.D ?? 0);
-  const modelAway = normaliseProbability(m.A ?? 0);
+  // Model probs
+  const modelHome = clamp01(normaliseProbability(m.H ?? 0));
+  const modelDraw = clamp01(normaliseProbability(m.D ?? 0));
+  const modelAway = clamp01(normaliseProbability(m.A ?? 0));
 
-  const dHome = modelHome - marketHome;
-  const dDraw = modelDraw - marketDraw;
-  const dAway = modelAway - marketAway;
+  // Market probs (vig-removed + normalised)
+  const mkHome = clamp01(marketHome);
+  const mkDraw = clamp01(marketDraw);
+  const mkAway = clamp01(marketAway);
 
-  const best = [
-    { side: "home" as const, delta: dHome },
-    { side: "draw" as const, delta: dDraw },
-    { side: "away" as const, delta: dAway },
-  ].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))[0];
+  // Deltas: positive means value
+  const deltaHome = modelHome - mkHome;
+  const deltaDraw = modelDraw - mkDraw;
+  const deltaAway = modelAway - mkAway;
 
-  const deltaAbs = Math.abs(best.delta);
-  if (deltaAbs < INTERESTING_DELTA_MIN) return null;
+  const candidates: Candidate[] = [
+    {
+      side: "home" as const,
+      delta: deltaHome,
+      modelProb: modelHome,
+      marketProb: mkHome,
+      valueScore: 0,
+    },
+    {
+      side: "draw" as const,
+      delta: deltaDraw,
+      modelProb: modelDraw,
+      marketProb: mkDraw,
+      valueScore: 0,
+    },
+    {
+      side: "away" as const,
+      delta: deltaAway,
+      modelProb: modelAway,
+      marketProb: mkAway,
+      valueScore: 0,
+    },
+  ]
+    .filter((c) => Number.isFinite(c.delta))
+    .filter((c) => c.delta >= INTERESTING_DELTA_MIN)
+    .filter(
+      (c) =>
+        c.modelProb >= INTERESTING_MODEL_MIN &&
+        c.modelProb <= INTERESTING_MODEL_MAX,
+    )
+    .filter((c) => c.marketProb <= INTERESTING_MARKET_MAX);
+
+  if (candidates.length === 0) return null;
+
+  for (const c of candidates) {
+    c.valueScore = c.delta * (1 - c.marketProb);
+  }
+
+  candidates.sort((a, b) => b.valueScore - a.valueScore);
+  const best = candidates[0];
 
   return {
-    side: best.side,
-    delta: best.delta,
-    deltaAbs,
-    market: { home: marketHome, draw: marketDraw, away: marketAway, overround },
-    model: { home: modelHome, draw: modelDraw, away: modelAway },
+    bestKey: best.side,
+    bestDelta: best.delta,
+    valueScore: best.valueScore,
+    modelProb: best.modelProb,
+    marketProb: best.marketProb,
+    deltaHome,
+    deltaDraw,
+    deltaAway,
+    deltaAbs: Math.abs(best.delta),
+    overround,
+    threshold: INTERESTING_DELTA_MIN,
   };
+};
+
+/* -------------------------------------------------------------------------- */
+/*                             Highlights / Scoring                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * How “clear” the favourite is:
+ * gap = bestProb - secondBestProb
+ * @param {PredictBatchResponse["predictions"][number]} p
+ * @returns - gap number
+ */
+export const resultGap = (p: PredictBatchResponse["predictions"][number]) => {
+  const H = Number(p.matchResult.H ?? 0);
+  const D = Number(p.matchResult.D ?? 0);
+  const A = Number(p.matchResult.A ?? 0);
+
+  const probs = [H, D, A].sort((a, b) => b - a);
+  const best = probs[0] ?? 0;
+  const second = probs[1] ?? 0;
+  return Math.max(0, best - second);
+};
+
+/**
+ * Get the probability of the picked result.
+ * @param {PredictBatchResponse["predictions"][number]} p
+ * @return {*} - probability number
+ */
+export const pickedResultProb = (
+  p: PredictBatchResponse["predictions"][number],
+) => {
+  const pick = p.matchResult.pick;
+  if (pick === "H") return p.matchResult.H ?? 0;
+  if (pick === "D") return p.matchResult.D ?? 0;
+  return p.matchResult.A ?? 0;
 };
 
 /**
@@ -433,10 +547,12 @@ export const computeHighlightMeta = (
   };
 };
 
+/* -------------------------------------------------------------------------- */
+/*                             Markets / Odds (1X2)                            */
+/* -------------------------------------------------------------------------- */
+
 /**
  * Computes the probabilities for the 1x2 market based on decimal odds.
- * @param decimal - Decimal odds for home, draw, and away
- * @returns - MarketProbs1x2 object or null if computation fails
  */
 export const computeMarketProbs1x2 = (
   decimal?: Partial<Odds1x2> | null,
@@ -445,7 +561,6 @@ export const computeMarketProbs1x2 = (
   const d = typeof decimal?.draw === "number" ? decimal.draw : null;
   const a = typeof decimal?.away === "number" ? decimal.away : null;
 
-  // require all 3 for 1x2
   if (h == null || d == null || a == null) return null;
   if (h <= 1 || d <= 1 || a <= 1) return null;
 
@@ -464,11 +579,114 @@ export const computeMarketProbs1x2 = (
   };
 };
 
+const toDecimal = (n: unknown): number | null => {
+  const v = typeof n === "string" ? Number(n) : typeof n === "number" ? n : NaN;
+  return Number.isFinite(v) && v > 1.0 ? v : null;
+};
+
 /**
- * Returns the final score from a fixture object.
- * @param fx - Fixture object containing home and away goals
- * @returns - Object with homeGoals (hg) and awayGoals (ag), or null if not available
+ * Normalises a label by trimming whitespace and converting to lowercase.
+ * @param s - label string
+ * @returns - normalised label
  */
+const normaliseLabel = (s: string) => s.trim().toLowerCase();
+
+/**
+ * Normalises 1X2 odds from various formats into a standard structure.
+ * @param odds - unknown[] | undefined | null
+ * @returns - OddsSnapshot | null
+ */
+export const normalise1x2Odds = (
+  odds: SportMonksOdd[] | null | undefined,
+): Market1x2 | null => {
+  if (!odds?.length) return null;
+
+  // Market 1: Full time result
+  const ft = odds.filter((o) => o.market_id === 1 && !o.stopped);
+  if (!ft.length) return null;
+
+  // Group by bookmaker
+  const byBook = new Map<number, SportMonksOdd[]>();
+  for (const o of ft) {
+    byBook.set(o.bookmaker_id, [...(byBook.get(o.bookmaker_id) ?? []), o]);
+  }
+
+  let best: {
+    bookmakerId: number;
+    updatedAt: string | null;
+    items: SportMonksOdd[];
+  } | null = null;
+
+  for (const [bookmakerId, items] of byBook) {
+    const home = items.find((i) => normaliseLabel(i.label) === "home");
+    const draw = items.find((i) => normaliseLabel(i.label) === "draw");
+    const away = items.find((i) => normaliseLabel(i.label) === "away");
+    if (!home || !draw || !away) continue;
+
+    const updatedAt =
+      items
+        .map((i) => i.latest_bookmaker_update ?? null)
+        .filter(Boolean)
+        .sort()
+        .slice(-1)[0] ?? null;
+
+    if (!best) best = { bookmakerId, updatedAt, items };
+    else if ((updatedAt ?? "") > (best.updatedAt ?? "")) {
+      best = { bookmakerId, updatedAt, items };
+    }
+  }
+
+  if (!best) return null;
+
+  const items = best.items;
+  const homeOdd = toDecimal(
+    items.find((i) => normaliseLabel(i.label) === "home")?.value,
+  );
+  const drawOdd = toDecimal(
+    items.find((i) => normaliseLabel(i.label) === "draw")?.value,
+  );
+  const awayOdd = toDecimal(
+    items.find((i) => normaliseLabel(i.label) === "away")?.value,
+  );
+
+  if (!homeOdd || !drawOdd || !awayOdd) return null;
+
+  const pH = 1 / homeOdd;
+  const pD = 1 / drawOdd;
+  const pA = 1 / awayOdd;
+  const sum = pH + pD + pA;
+
+  return {
+    market: "1x2",
+    bookmakerId: best.bookmakerId,
+    updatedAt: best.updatedAt,
+    decimal: { home: homeOdd, draw: drawOdd, away: awayOdd },
+    implied: { home: pH / sum, draw: pD / sum, away: pA / sum },
+  };
+};
+
+/**
+ * Converts SportsMonks odds to decimal odds.
+ * Handles scaled values (e.g. 301 -> 3.01).
+ */
+export const oddsToDecimal = (n: unknown): number | null => {
+  if (n == null) return null;
+
+  const raw =
+    typeof n === "string" ? Number(n) : typeof n === "number" ? n : NaN;
+
+  if (!Number.isFinite(raw)) return null;
+
+  // SportsMonks often returns odds * 100
+  const value = raw >= 100 ? raw / 100 : raw;
+
+  return value > 1 ? Number(value.toFixed(3)) : null;
+};
+
+/* -------------------------------------------------------------------------- */
+/*                          Fixtures / Scores Extraction                        */
+/* -------------------------------------------------------------------------- */
+
 export function extractFinalScoreFromFixture(fx: {
   homeGoals?: number | null;
   awayGoals?: number | null;
@@ -477,11 +695,6 @@ export function extractFinalScoreFromFixture(fx: {
   return { hg: fx.homeGoals, ag: fx.awayGoals };
 }
 
-/**
- * Retrieves the final score from an array of score objects.
- * @param scores - Array of score objects
- * @returns - Object with homeGoals (hg) and awayGoals (ag), or null if not found
- */
 export function extractFinalScoreFromScoresArray(
   scores: any[] | null | undefined,
 ) {
@@ -501,9 +714,25 @@ export function extractFinalScoreFromScoresArray(
 }
 
 /**
+ * Picks score rows from scores array, prioritizing "CURRENT" then "FT".
+ * @param scores - any[]
+ * @returns - any[]
+ */
+export const pickScoreRows = (scores: any[]): any[] => {
+  const byDesc = (d: string) =>
+    scores.filter((s) => String(s?.description ?? "").toUpperCase() === d);
+
+  const current = byDesc("CURRENT");
+  if (current.length) return current;
+
+  const ft = byDesc("FT");
+  if (ft.length) return ft;
+
+  return [];
+};
+
+/**
  * Extracts current goals from fixture data.
- * @param fx - fixture object
- * @returns - Goals | null
  */
 export const extractCurrentGoals = (fx: any): Goals | null => {
   const parts: any[] = fx?.participants ?? [];
@@ -542,8 +771,6 @@ export const extractCurrentGoals = (fx: any): Goals | null => {
 
 /**
  * Extracts home and away participants and positions.
- * @param participants - Participant array
- * @returns - Object with home and away participants and their IDs and positions, or null if not found
  */
 export const extractHomeAway = (participants: Participant[]) => {
   const home = participants.find((p) => p.meta?.location === "home");
@@ -560,11 +787,6 @@ export const extractHomeAway = (participants: Participant[]) => {
   };
 };
 
-/**
- * Extracts home and away team IDs from a fixture object.
- * @param fixture - Fixture object
- * @returns - Object containing homeTeamId and awayTeamId
- */
 export const extractTeamIds = (fixture: any) => {
   const homeTeamId = fixture.participants?.find(
     (p: any) => p.meta?.location === "home",
@@ -575,12 +797,6 @@ export const extractTeamIds = (fixture: any) => {
   return { homeTeamId, awayTeamId };
 };
 
-/**
- * Extracts team and opponent xG values from an xG array.
- * @param xgArr - xG array
- * @param teamId -  Team ID
- * @returns - Object with teamXg and oppXg values, or null if not found
- */
 export const extractTeamAndOppXg = (
   xgArr: any[],
   teamId: number,
@@ -600,14 +816,44 @@ export const extractTeamAndOppXg = (
   };
 };
 
+export const getFinalScore = (scores: any[]) => {
+  const home = scores.find(
+    (s) => s.description === "CURRENT" && s.score.participant === "home",
+  )?.score.goals;
+  const away = scores.find(
+    (s) => s.description === "CURRENT" && s.score.participant === "away",
+  )?.score.goals;
+  if (typeof home !== "number" || typeof away !== "number") return null;
+  return { home, away };
+};
+
 /**
- * Returns head-to-head fixtures between two teams.
- * @param homeTeamId - number
- * @param awayTeamId - number
- * @param token - string
- * @param count - number of fixtures to retrieve (default is 5)
- * @returns Array of head-to-head fixture objects
+ * Retrieves the xG fixture array from a fixture object, handling different casing.
+ * @param {*} fx - Fixture object
+ * @return {*}  {any[]}
  */
+export const getXgFixtureArray = (fx: any): any[] => {
+  const a = fx?.xgfixture;
+  if (Array.isArray(a)) return a;
+  const b = fx?.xgFixture;
+  if (Array.isArray(b)) return b;
+  return [];
+};
+
+/**
+ * Checks if a fixture is in a finished state based on its short name.
+ * @param shortName - Short name of the fixture state
+ * @returns - True if the fixture is finished, false otherwise
+ */
+export const isFinished = (shortName?: string) => {
+  if (!shortName) return false;
+  return FINISHED_STATES.has(shortName);
+};
+
+/* -------------------------------------------------------------------------- */
+/*                                   H2H                                      */
+/* -------------------------------------------------------------------------- */
+
 export const fetchH2H = async (
   homeTeamId: number,
   awayTeamId: number,
@@ -669,29 +915,21 @@ export const fetchH2H = async (
     .filter(Boolean);
 };
 
-/**
- * Gets the final score from an array of score objects.
- * @param scores
- * @returns - An object with home and away scores, or null if not found
- */
-export const getFinalScore = (scores: any[]) => {
-  const home = scores.find(
-    (s) => s.description === "CURRENT" && s.score.participant === "home",
-  )?.score.goals;
-  const away = scores.find(
-    (s) => s.description === "CURRENT" && s.score.participant === "away",
-  )?.score.goals;
-  if (typeof home !== "number" || typeof away !== "number") return null;
-  return { home, away };
-};
+/* -------------------------------------------------------------------------- */
+/*                                Misc Helpers                                */
+/* -------------------------------------------------------------------------- */
 
 /**
- * Get pagination info from API response.
- * SportMonks responses can vary by endpoint/version,
- * some use json.pagination, some use json.meta.pagination
- * @param json - API response object
- * @returns - Pagination object or null if not found
+ * Provides a safe way to get the league name from a fixture.
+ * @param f - Fixture object
+ * @returns - League name or league ID as string if name is unavailable
  */
+export const safeLeagueName = (f: Fixture) => {
+  const n = (f as any)?.league?.name;
+  if (typeof n === "string" && n.trim()) return n.trim();
+  return String(f.league_id);
+};
+
 export const getPagination = (json: any): RawPagination | null => {
   const p = json?.pagination ?? json?.meta?.pagination ?? json?.meta ?? null;
   if (!p) return null;
@@ -709,196 +947,7 @@ export const getPagination = (json: any): RawPagination | null => {
 };
 
 /**
- * Retrieves the xG fixture array from a fixture object, handling different casing.
- * @param {*} fx - Fixture object
- * @return {*}  {any[]}
- */
-export const getXgFixtureArray = (fx: any): any[] => {
-  const a = fx?.xgfixture;
-  if (Array.isArray(a)) return a;
-  const b = fx?.xgFixture;
-  if (Array.isArray(b)) return b;
-  return [];
-};
-
-/**
- * Checks if a fixture is in a finished state based on its short name.
- * @param shortName - Short name of the fixture state
- * @returns - True if the fixture is finished, false otherwise
- */
-export const isFinished = (shortName?: string) => {
-  if (!shortName) return false;
-  return FINISHED_STATES.has(shortName);
-};
-
-const toDecimal = (n: unknown): number | null => {
-  const v = typeof n === "string" ? Number(n) : typeof n === "number" ? n : NaN;
-  return Number.isFinite(v) && v > 1.0 ? v : null;
-};
-
-/**
- * Normalises 1X2 odds from various formats into a standard structure.
- * @param odds - unknown[] | undefined | null
- * @returns - OddsSnapshot | null
- */
-export const normalise1x2Odds = (
-  odds: SportMonksOdd[] | null | undefined,
-): Market1x2 | null => {
-  if (!odds?.length) return null;
-
-  // Market 1: Full time result
-  const ft = odds.filter((o) => o.market_id === 1 && !o.stopped);
-  if (!ft.length) return null;
-
-  // Group by bookmaker
-  const byBook = new Map<number, SportMonksOdd[]>();
-  for (const o of ft) {
-    byBook.set(o.bookmaker_id, [...(byBook.get(o.bookmaker_id) ?? []), o]);
-  }
-
-  let best: {
-    bookmakerId: number;
-    updatedAt: string | null;
-    items: SportMonksOdd[];
-  } | null = null;
-
-  for (const [bookmakerId, items] of byBook) {
-    const home = items.find((i) => normaliseLabel(i.label) === "home");
-    const draw = items.find((i) => normaliseLabel(i.label) === "draw");
-    const away = items.find((i) => normaliseLabel(i.label) === "away");
-    if (!home || !draw || !away) continue;
-
-    const updatedAt =
-      items
-        .map((i) => i.latest_bookmaker_update ?? null)
-        .filter(Boolean)
-        .sort()
-        .slice(-1)[0] ?? null;
-
-    if (!best) best = { bookmakerId, updatedAt, items };
-    else {
-      if ((updatedAt ?? "") > (best.updatedAt ?? ""))
-        best = { bookmakerId, updatedAt, items };
-    }
-  }
-
-  if (!best) return null;
-
-  const items = best.items;
-  const homeOdd = toDecimal(
-    items.find((i) => normaliseLabel(i.label) === "home")?.value,
-  );
-  const drawOdd = toDecimal(
-    items.find((i) => normaliseLabel(i.label) === "draw")?.value,
-  );
-  const awayOdd = toDecimal(
-    items.find((i) => normaliseLabel(i.label) === "away")?.value,
-  );
-
-  if (!homeOdd || !drawOdd || !awayOdd) return null;
-
-  const pH = 1 / homeOdd;
-  const pD = 1 / drawOdd;
-  const pA = 1 / awayOdd;
-  const sum = pH + pD + pA;
-
-  return {
-    market: "1x2",
-    bookmakerId: best.bookmakerId,
-    updatedAt: best.updatedAt,
-    decimal: { home: homeOdd, draw: drawOdd, away: awayOdd },
-    implied: { home: pH / sum, draw: pD / sum, away: pA / sum },
-  };
-};
-
-/**
- * Normalises a label by trimming whitespace and converting to lowercase.
- * @param s - label string
- * @returns - normalised label
- */
-const normaliseLabel = (s: string) => s.trim().toLowerCase();
-
-/**
- * Converts SportsMonks odds to decimal odds.
- * Handles scaled values (e.g. 301 -> 3.01).
- */
-export const oddsToDecimal = (n: unknown): number | null => {
-  if (n == null) return null;
-
-  const raw =
-    typeof n === "string" ? Number(n) : typeof n === "number" ? n : NaN;
-
-  if (!Number.isFinite(raw)) return null;
-
-  // SportsMonks often returns odds * 100
-  const value = raw >= 100 ? raw / 100 : raw;
-
-  return value > 1 ? Number(value.toFixed(3)) : null;
-};
-
-/**
- * Picks score rows from scores array, prioritizing "CURRENT" then "FT".
- * @param scores - any[]
- * @returns - any[]
- */
-export const pickScoreRows = (scores: any[]): any[] => {
-  const byDesc = (d: string) =>
-    scores.filter((s) => String(s?.description ?? "").toUpperCase() === d);
-
-  const current = byDesc("CURRENT");
-  if (current.length) return current;
-
-  const ft = byDesc("FT");
-  if (ft.length) return ft;
-
-  return [];
-};
-
-/**
- * Get the probability of the picked result.
- * @param {PredictBatchResponse["predictions"][number]} p
- * @return {*} - probability number
- */
-export const pickedResultProb = (
-  p: PredictBatchResponse["predictions"][number],
-) => {
-  const pick = p.matchResult.pick;
-  if (pick === "H") return p.matchResult.H ?? 0;
-  if (pick === "D") return p.matchResult.D ?? 0;
-  return p.matchResult.A ?? 0;
-};
-
-/**
- * Provides a safe way to get the league name from a fixture.
- * @param f - Fixture object
- * @returns - League name or league ID as string if name is unavailable
- */
-export const safeLeagueName = (f: Fixture) => {
-  const n = (f as any)?.league?.name;
-  if (typeof n === "string" && n.trim()) return n.trim();
-  return String(f.league_id);
-};
-
-/**
- * How “clear” the favourite is:
- * gap = bestProb - secondBestProb
- */
-export const resultGap = (p: PredictBatchResponse["predictions"][number]) => {
-  const H = Number(p.matchResult.H ?? 0);
-  const D = Number(p.matchResult.D ?? 0);
-  const A = Number(p.matchResult.A ?? 0);
-
-  const probs = [H, D, A].sort((a, b) => b - a);
-  const best = probs[0] ?? 0;
-  const second = probs[1] ?? 0;
-  return Math.max(0, best - second);
-};
-
-/**
  * Calculates the weighted average of given values and weights.
- * @param values - Array of numbers
- * @param weights - Array of weights
- * @returns - Weighted average or null if values array is empty or weights sum to zero
  */
 export const weightedAvg = (values: number[], weights: number[]) => {
   if (!values.length) return null;

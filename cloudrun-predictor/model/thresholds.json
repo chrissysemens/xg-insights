@@ -1,0 +1,19 @@
+{
+  "modelVersion": "epl-v3",
+  "over25_threshold": 0.47000000000000014,
+  "btts_threshold": 0.49000000000000016,
+  "calibration": {
+    "over25": {
+      "balanced_accuracy": 0.5534076426761955,
+      "f1": 0.6177123260036312,
+      "accuracy": 0.5589946474284384,
+      "objective": 0.5726990476744261
+    },
+    "btts": {
+      "balanced_accuracy": 0.5036976917882279,
+      "f1": 0.7011160373031646,
+      "accuracy": 0.5450314172678613,
+      "objective": 0.5629231954427089
+    }
+  }
+}

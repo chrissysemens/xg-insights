@@ -48,6 +48,35 @@ def _chunked(items: List[int], size: int) -> Iterable[List[int]]:
         yield items[i : i + size]
 
 
+def _pagination_has_more(pagination: Dict[str, Any], current_page: int, count: int) -> bool:
+    has_more = pagination.get("has_more")
+    if isinstance(has_more, bool):
+        return has_more
+
+    cur = int(
+        pagination.get("current_page")
+        or pagination.get("currentPage")
+        or pagination.get("page")
+        or current_page
+    )
+
+    last_raw = (
+        pagination.get("last_page")
+        or pagination.get("lastPage")
+        or pagination.get("total_pages")
+        or pagination.get("totalPages")
+    )
+    try:
+        last = int(last_raw)
+    except Exception:
+        last = -1
+
+    if last > 0:
+        return cur < last
+
+    return count > 0
+
+
 def seasons_for_league(client: SMClient, league_id: int) -> List[Dict[str, Any]]:
     # Fetch the league and include its seasons
     url = f"{client.base_url}/leagues/{league_id}?api_token={client.token}&include=seasons"
@@ -64,10 +93,6 @@ def fixtures_by_season(client: SMClient, season_id: int, include: str | None = N
       1) GET /schedules/seasons/{season_id}  -> get fixture ids
       2) GET /fixtures/multi/{ids...}        -> fetch full fixture objects (50 ids max)
     """
-    # 1) schedule
-    schedule_url = f"{client.base_url}/schedules/seasons/{season_id}?api_token={client.token}"
-    schedule = client.get_json(schedule_url)
-
     fixture_ids: List[int] = []
 
     def walk(obj: Any):
@@ -83,7 +108,26 @@ def fixtures_by_season(client: SMClient, season_id: int, include: str | None = N
             for x in obj:
                 walk(x)
 
-    walk(schedule.get("data", schedule))
+    # 1) schedule pages
+    page = 1
+    has_more = True
+
+    while has_more:
+        schedule_url = (
+            f"{client.base_url}/schedules/seasons/{season_id}"
+            f"?api_token={client.token}&page={page}"
+        )
+        schedule = client.get_json(schedule_url)
+
+        walk(schedule.get("data", schedule))
+
+        pagination = schedule.get("pagination") or (schedule.get("meta") or {}).get("pagination") or {}
+        page_count = len(schedule.get("data") or []) if isinstance(schedule.get("data"), list) else 1
+        has_more = _pagination_has_more(pagination, page, page_count)
+        page += 1
+
+        if page_count == 0:
+            has_more = False
 
     fixture_ids = sorted(set(fixture_ids))
     if not fixture_ids:

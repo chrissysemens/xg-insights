@@ -1,4 +1,6 @@
 import os
+import json
+from pathlib import Path
 import numpy as np
 from fastapi import FastAPI, HTTPException
 from app.schemas import (
@@ -7,12 +9,58 @@ from app.schemas import (
     PredictionOut,
     MatchResultOut,
     BinaryOut,
+    FeatureContributionOut,
 )
 from app.feature_flatten import build_matrix
 from app.models import ModelBundle
 
-OVER25_THRESHOLD = float(os.getenv("OVER25_THRESHOLD", "0.59"))
-BTTS_THRESHOLD = float(os.getenv("BTTS_THRESHOLD", "0.56"))
+MODEL_DIR = Path(__file__).resolve().parent.parent / "model"
+
+
+def _load_threshold_defaults() -> tuple[dict[str, float], dict[str, str]]:
+    p = MODEL_DIR / "thresholds.json"
+    defaults = {"over25": 0.59, "btts": 0.56}
+    sources = {"over25": "hardcoded", "btts": "hardcoded"}
+    if not p.exists():
+        return defaults, sources
+
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        over = data.get("over25_threshold")
+        btts = data.get("btts_threshold")
+        if isinstance(over, (int, float)):
+            defaults["over25"] = float(over)
+            sources["over25"] = "thresholds.json"
+        if isinstance(btts, (int, float)):
+            defaults["btts"] = float(btts)
+            sources["btts"] = "thresholds.json"
+    except Exception as e:
+        print(f"Invalid thresholds file at {p}: {type(e).__name__}: {e}")
+
+    return defaults, sources
+
+
+def _resolve_threshold(name: str, default: float, default_source: str) -> tuple[float, str]:
+    raw = os.getenv(name)
+    if raw is None:
+        return default, default_source
+    try:
+        return float(raw), "env"
+    except Exception:
+        print(f"Invalid {name}={raw!r}; using default {default}")
+        return default, default_source
+
+THRESHOLD_DEFAULTS, THRESHOLD_SOURCES = _load_threshold_defaults()
+OVER25_THRESHOLD, OVER25_SOURCE = _resolve_threshold(
+    "OVER25_THRESHOLD",
+    THRESHOLD_DEFAULTS["over25"],
+    THRESHOLD_SOURCES["over25"],
+)
+BTTS_THRESHOLD, BTTS_SOURCE = _resolve_threshold(
+    "BTTS_THRESHOLD",
+    THRESHOLD_DEFAULTS["btts"],
+    THRESHOLD_SOURCES["btts"],
+)
 
 app = FastAPI(title="Football Predictor", version="1.0.0")
 
@@ -27,7 +75,13 @@ def startup():
         bundle = ModelBundle()
         bundle_error = None
         print("Startup OK: models loaded")
-        print("Thresholds:", {"over25": OVER25_THRESHOLD, "btts": BTTS_THRESHOLD})
+        print(
+            "Thresholds:",
+            {
+                "over25": {"value": OVER25_THRESHOLD, "source": OVER25_SOURCE},
+                "btts": {"value": BTTS_THRESHOLD, "source": BTTS_SOURCE},
+            },
+        )
     except Exception as e:
         bundle = None
         bundle_error = f"{type(e).__name__}: {e}"
@@ -36,7 +90,16 @@ def startup():
 
 @app.get("/health")
 def health():
-    return {"ok": True}
+    loaded = bundle is not None
+    return {
+        "ok": loaded,
+        "modelsLoaded": loaded,
+        "error": (None if loaded else bundle_error),
+        "thresholds": {
+            "over25": {"value": OVER25_THRESHOLD, "source": OVER25_SOURCE},
+            "btts": {"value": BTTS_THRESHOLD, "source": BTTS_SOURCE},
+        },
+    }
 
 
 @app.post("/predictBatch", response_model=PredictBatchResponse)
@@ -94,12 +157,25 @@ def predict_batch(req: PredictBatchRequest):
             pick=("Y" if btts_y >= BTTS_THRESHOLD else "N"),
         )
 
+        class_index = 0 if pick == "H" else 1 if pick == "D" else 2
+        explain_rows, result_bias = bundle.explain_result_row(X[i], class_index, top_k=8)
+        explain_out = [
+            FeatureContributionOut(
+                feature=str(row["feature"]),
+                value=float(row["value"]),
+                contribution=float(row["contribution"]),
+            )
+            for row in explain_rows
+        ]
+
         preds.append(
             PredictionOut(
                 fixtureId=it.fixtureId,
                 matchResult=match_out,
                 over25=over_out,
                 btts=btts_out,
+                resultExplain=explain_out,
+                resultBias=result_bias,
             )
         )
 

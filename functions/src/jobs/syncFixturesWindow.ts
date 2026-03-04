@@ -2,6 +2,7 @@ import * as admin from "firebase-admin";
 import { ENV } from "../config";
 import { addDaysUTC, formatDateUTC } from "../utils/date";
 import { Fixture } from "../types";
+import { fetchJSON } from "../sportmonks/client";
 import {
   extractCurrentGoals,
   extractHomeAway,
@@ -17,6 +18,7 @@ import {
  * Also maintains fixture_details/{fixtureId} (denormalised view doc)
  */
 export async function syncFixturesWindow(token: string) {
+  const startedAtMs = Date.now();
   const db = admin.firestore();
 
   const windowStart = new Date();
@@ -65,6 +67,16 @@ export async function syncFixturesWindow(token: string) {
   let page = 1;
   let hasMore = true;
 
+  let pagesFetched = 0;
+  let rawFixturesFetched = 0;
+  let skippedLeague = 0;
+  let skippedMissingParticipants = 0;
+  let skippedState = 0;
+  let postponedDeleted = 0;
+  let archivedFinished = 0;
+  let upsertedLive = 0;
+  let teamsUpserted = 0;
+
   while (hasMore) {
     const url =
       `${ENV.SPORTSMONKS.BASE_URL}/fixtures/between/${windowStartStr}/${windowEndStr}` +
@@ -72,14 +84,10 @@ export async function syncFixturesWindow(token: string) {
       `&include=${encodeURIComponent(include)}` +
       `&page=${page}`;
 
-    const res = await fetch(url, { headers: { accept: "application/json" } });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`SportMonks error ${res.status}: ${text.slice(0, 500)}`);
-    }
-
-    const json = await res.json();
+    const json = await fetchJSON(url, { timeoutMs: 25_000, retries: 5 });
     const fixtures: Fixture[] = json?.data ?? [];
+    pagesFetched++;
+    rawFixturesFetched += fixtures.length;
 
     const pagination = getPagination(json) as any;
     hasMore = getHasMore(pagination, page, fixtures.length);
@@ -89,6 +97,7 @@ export async function syncFixturesWindow(token: string) {
 
     for (const f of fixtures) {
       if (!ALLOWED_LEAGUE_IDS.has(f.league_id)) {
+        skippedLeague++;
         continue;
       }
 
@@ -100,10 +109,11 @@ export async function syncFixturesWindow(token: string) {
       const participants = f.participants ?? [];
       const mapped = extractHomeAway(participants);
       if (!mapped) {
+        skippedMissingParticipants++;
         continue;
       }
 
-      if (short === "POSTPONED") {
+      if (short === "POSTPONED" || short === "POST") {
         const liveRef = db.collection("fixtures_live").doc(fixtureId);
         const predRef = db.collection("predictions_live").doc(fixtureId);
         const detailsRef = db.collection("fixture_details").doc(fixtureId);
@@ -112,6 +122,7 @@ export async function syncFixturesWindow(token: string) {
         batch.delete(predRef);
         batch.delete(detailsRef);
         operations += 3;
+        postponedDeleted++;
 
         if (operations >= 450) {
           await batch.commit();
@@ -124,6 +135,7 @@ export async function syncFixturesWindow(token: string) {
 
       if (!isFinished(short)) {
         if (short && short !== "NS") {
+          skippedState++;
           continue;
         }
       }
@@ -149,6 +161,7 @@ export async function syncFixturesWindow(token: string) {
         );
 
         operations++;
+        teamsUpserted++;
         if (operations >= 450) {
           await batch.commit();
           batch = db.batch();
@@ -275,9 +288,11 @@ export async function syncFixturesWindow(token: string) {
         );
 
         operations += 3;
+        archivedFinished++;
       } else {
         batch.set(liveRef, fixturePayload, { merge: true });
         operations++;
+        upsertedLive++;
 
         batch.set(
           detailsRef,
@@ -319,8 +334,6 @@ export async function syncFixturesWindow(token: string) {
   const liveSnap = await db
     .collection("fixtures_live")
     .where("inWindow", "==", true)
-    .where("windowStart", "==", windowStartStr)
-    .where("windowEnd", "==", windowEndStr)
     .get();
 
   let batch = db.batch();
@@ -347,4 +360,23 @@ export async function syncFixturesWindow(token: string) {
     }
   }
   if (operations > 0) await batch.commit();
+
+  const durationMs = Date.now() - startedAtMs;
+  console.log("[syncFixturesWindow] done", {
+    durationMs,
+    windowStart: windowStartStr,
+    windowEnd: windowEndStr,
+    allowedLeagues: ALLOWED_LEAGUE_IDS.size,
+    pagesFetched,
+    rawFixturesFetched,
+    acceptedFixtures: seenFixtureIds.size,
+    teamsUpserted,
+    upsertedLive,
+    archivedFinished,
+    postponedDeleted,
+    skippedLeague,
+    skippedMissingParticipants,
+    skippedState,
+    pruned,
+  });
 }

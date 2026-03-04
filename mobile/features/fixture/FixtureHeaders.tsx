@@ -1,6 +1,6 @@
 import { View } from 'react-native';
 import { Text } from '@/components/text/Text';
-import { formatKickoff } from '@/components/cards/FixtureCard';
+import { formatKickoff } from '@/utils/highlight-reason';
 import { FixtureDetailsDoc } from '@/types';
 import { useTheme } from '@/theme/useTheme';
 

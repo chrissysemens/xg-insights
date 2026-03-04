@@ -1,3 +1,4 @@
+import { minScoreForTab } from '@/features/highlights/helpers';
 import { db } from '@/firebase';
 import { FixtureDoc, HighlightItem, PredictionDoc, TeamDoc } from '@/types';
 import {
@@ -10,6 +11,7 @@ import {
   Unsubscribe,
   documentId,
   getDocs,
+  QueryConstraint,
 } from 'firebase/firestore';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -40,43 +42,107 @@ const chunk = <T,>(arr: T[], size: number) => {
   return out;
 };
 
-const tagFieldForTab = (tab: Tab) => {
+const numOr0 = (v: unknown) =>
+  typeof v === 'number' && Number.isFinite(v) ? v : 0;
+
+/**
+ * What field do we use as the "score" for sorting/filtering?
+ *
+ * - winners/goals: highlightScore (as you already have)
+ * - interesting: use interestingMeta.valueScore if present (client sort)
+ *
+ * If you later store `prediction.highlightScore = interestingMeta.valueScore`,
+ * you can remove the interesting special-case and treat everything as highlightScore.
+ */
+const interestingScore = (m: any) => {
+  const dHome = numOr0(m?.deltaHome);
+  const dDraw = numOr0(m?.deltaDraw);
+  const dAway = numOr0(m?.deltaAway);
+
+  return Math.max(Math.abs(dHome), Math.abs(dDraw), Math.abs(dAway));
+};
+
+const scoreForTab = (tab: Tab, pred: any) => {
+  if (tab === 'interesting') {
+    return (
+      interestingScore(pred?.interestingMeta) ||
+      numOr0(pred?.highlightScore)
+    );
+  }
+  return numOr0(pred?.highlightScore);
+};
+
+/**
+ * Tab -> Firestore constraint.
+ * Use tags so the query returns the right population.
+ */
+const constraintForTab = (tab: Tab): QueryConstraint => {
   switch (tab) {
     case 'winners':
-      return 'prediction.tags.clearFavourite' as const;
+      return where('prediction.tags.clearFavourite', '==', true);
+
     case 'goals':
-      return 'prediction.tags.goals' as const;
+      // includes BOTH HIGH_GOALS and BTTS_LIKELY (and any future goals-ish reason)
+      return where('prediction.tags.goals', '==', true);
+
     case 'interesting':
-      return 'prediction.tags.interesting' as const;
+      return where('prediction.tags.interesting', '==', true);
   }
 };
 
-const numOr0 = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
-
 export function useHighlightsForTab(tab: Tab, take = 50) {
   const [fixtureIds, setFixtureIds] = useState<string[]>([]);
-  const [detailsById, setDetailsById] = useState<Record<string, FixtureDetailsDoc>>({});
-  const [fixturesById, setFixturesById] = useState<Record<string, FixtureDoc>>({});
+  const [detailsById, setDetailsById] = useState<Record<string, FixtureDetailsDoc>>(
+    {},
+  );
+  const [fixturesById, setFixturesById] = useState<Record<string, FixtureDoc>>(
+    {},
+  );
   const [teamsById, setTeamsById] = useState<Record<string, TeamDoc>>({});
-  const [loading, setLoading] = useState(true);
+
+  const [detailsLoading, setDetailsLoading] = useState(true);
+  const [fixturesLoading, setFixturesLoading] = useState(false);
+  const [teamsLoading, setTeamsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 1) subscribe to fixture_details filtered by tab + qualified, sorted by highest highlightScore first
+  // 1) subscribe to fixture_details filtered by tab + qualified
   useEffect(() => {
-    setLoading(true);
+    setDetailsLoading(true);
     setError(null);
 
-    const tagField = tagFieldForTab(tab);
+    const minScore = minScoreForTab(tab);
+
+    // For winners/goals we can filter+order in Firestore by highlightScore.
+    // For interesting we *cannot* (unless you store a numeric field we can query),
+    // so we just order by updatedAt / startingAtTimestamp and filter client-side.
+    const base: QueryConstraint[] = [
+      constraintForTab(tab),
+      where('prediction.qualified', '==', true),
+      orderBy(documentId(), 'asc'),
+      limit(take),
+    ];
+
+    const scoreOrdered: QueryConstraint[] =
+      tab === 'interesting'
+        ? [
+            // you could order by starting time to keep it sensible
+            orderBy('startingAtTimestamp', 'asc'),
+            orderBy(documentId(), 'asc'),
+            limit(Math.max(take * 3, take)), // pull more then filter client-side
+          ]
+        : [
+            // winners/goals: enforce minScore + sort high-first
+            where('prediction.highlightScore', '>=', minScore),
+            orderBy('prediction.highlightScore', 'desc'),
+            orderBy(documentId(), 'asc'),
+            limit(take),
+          ];
 
     const qRef = query(
       collection(db, 'fixture_details'),
-      where(tagField, '==', true),
+      constraintForTab(tab),
       where('prediction.qualified', '==', true),
-      // sort highest first
-      orderBy('prediction.highlightScore', 'desc'),
-      // tie-break (optional but helps deterministic ordering + some index setups)
-      orderBy(documentId(), 'asc'),
-      limit(take),
+      ...scoreOrdered,
     );
 
     const unsub: Unsubscribe = onSnapshot(
@@ -92,18 +158,18 @@ export function useHighlightsForTab(tab: Tab, take = 50) {
 
         setFixtureIds(ids);
         setDetailsById(det);
-        setLoading(false);
+        setDetailsLoading(false);
       },
       (e) => {
         setError(e?.message ?? 'Failed to load fixture_details');
-        setLoading(false);
+        setDetailsLoading(false);
       },
     );
 
     return () => unsub();
   }, [tab, take]);
 
-  // 2) fetch fixtures_live for those ids (needed if FixtureCard depends on FixtureDoc fields)
+  // 2) fetch fixtures_live for those ids
   useEffect(() => {
     let cancelled = false;
 
@@ -112,6 +178,8 @@ export function useHighlightsForTab(tab: Tab, take = 50) {
         setFixturesById({});
         return;
       }
+
+      setFixturesLoading(true);
 
       try {
         const chunks = chunk(fixtureIds, 10);
@@ -129,6 +197,8 @@ export function useHighlightsForTab(tab: Tab, take = 50) {
         if (!cancelled) setFixturesById(map);
       } catch (e: any) {
         if (!cancelled) setError(e?.message ?? 'Failed to load fixtures_live');
+      } finally {
+        if (!cancelled) setFixturesLoading(false);
       }
     }
 
@@ -138,7 +208,7 @@ export function useHighlightsForTab(tab: Tab, take = 50) {
     };
   }, [fixtureIds.join('|')]);
 
-  // 3) fetch teams for those fixtures
+  // 3) fetch teams
   const teamIds = useMemo(() => {
     const ids = new Set<string>();
     Object.values(fixturesById).forEach((fx) => {
@@ -157,6 +227,8 @@ export function useHighlightsForTab(tab: Tab, take = 50) {
         return;
       }
 
+      setTeamsLoading(true);
+
       try {
         const chunks = chunk(teamIds, 10);
         const map: Record<string, TeamDoc> = {};
@@ -173,6 +245,8 @@ export function useHighlightsForTab(tab: Tab, take = 50) {
         if (!cancelled) setTeamsById(map);
       } catch (e: any) {
         if (!cancelled) setError(e?.message ?? 'Failed to load teams');
+      } finally {
+        if (!cancelled) setTeamsLoading(false);
       }
     }
 
@@ -182,35 +256,49 @@ export function useHighlightsForTab(tab: Tab, take = 50) {
     };
   }, [teamIds.join('|')]);
 
-  // 4) build items, and ensure highest-first even if Firestore returns ties / missing scores
-  const items: HighlightItem[] = useMemo(() => {
-    const out = fixtureIds
-      .map((fid) => {
-        const fx = fixturesById[fid];
-        const det = detailsById[fid];
-        const pred = det?.prediction ?? null;
+  // 4) build items
+ const items: HighlightItem[] = useMemo(() => {
+  const out = fixtureIds
+    .map((fid) => {
+      const fx = fixturesById[fid];
+      const det = detailsById[fid];
+      const pred = det?.prediction ?? null;
+      if (!fx || !pred) return null;
 
-        if (!fx || !pred) return null;
+      const score = scoreForTab(tab, pred as any);
 
-        return {
-          fixtureId: fid,
-          fixture: fx,
-          prediction: pred as any,
-          homeTeam: teamsById[String(fx.homeTeamId)],
-          awayTeam: teamsById[String(fx.awayTeamId)],
-          fixtureDetails: det ?? null,
-        };
-      })
-      .filter(Boolean) as HighlightItem[];
+      const minScore =
+        tab === 'interesting'
+          ? Math.max(
+              numOr0((pred as any)?.interestingMeta?.threshold) || 0.08,
+              0, // safety
+            )
+          : minScoreForTab(tab);
 
-    out.sort(
-      (a, b) =>
-        numOr0((b.prediction as any)?.highlightScore) -
-        numOr0((a.prediction as any)?.highlightScore),
-    );
+      if (score < minScore) return null;
 
-    return out;
-  }, [fixtureIds, fixturesById, teamsById, detailsById]);
+      return {
+        fixtureId: fid,
+        fixture: fx,
+        prediction: pred as any,
+        homeTeam: teamsById[String(fx.homeTeamId)],
+        awayTeam: teamsById[String(fx.awayTeamId)],
+        fixtureDetails: det ?? null,
+      };
+    })
+    .filter(Boolean) as HighlightItem[];
+
+  out.sort((a, b) => {
+    const diff =
+      scoreForTab(tab, b.prediction) - scoreForTab(tab, a.prediction);
+    if (diff !== 0) return diff;
+    return a.fixtureId.localeCompare(b.fixtureId);
+  });
+
+  return out.slice(0, take);
+}, [tab, take, fixtureIds, fixturesById, teamsById, detailsById]);
+
+  const loading = detailsLoading || fixturesLoading || teamsLoading;
 
   return {
     data: items,

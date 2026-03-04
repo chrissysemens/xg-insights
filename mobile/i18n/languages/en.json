@@ -30,7 +30,11 @@
     "over25": "Over 2.5",
     "resultConfidence": "{{conf}}% result confidence",
     "strongSignals": "Strong signals",
-    "topPicksDescription": "Top picks from the latest model run (next 5 days)"
+    "topPicksDescription": "Top picks from the latest model run (next 5 days)",
+    "homeValue": "Home value {{delta}}",
+    "awayValue": "Away value {{delta}}",
+    "drawValue": "Draw value {{delta}}",
+    "value": "Value"
   },
   "performance": {
     "modelPerformance": "Model Performance",
