@@ -1,6 +1,6 @@
 # TASK_0002 — Model improvement scratchpad
 
-_Last updated: 2026-03-06 13:13 UTC_
+_Last updated: 2026-03-06 16:06 UTC_
 
 ## Latest evaluation sample (fixtures_archive, archived 2026-03-04)
 
@@ -37,3 +37,5 @@ Accuracy over the five sample fixtures: **Result 3/5, Over2.5 3/5, BTTS 2/5.** B
 - 2026-03-06 10:41 UTC: Added fixture-id cache + configurable page cap inside trainer/sportmonks.py; env `SPORTMONKS_MAX_SCHEDULE_PAGES` defaults to 400 and cache lives under trainer/.cache/schedules.
 - 2026-03-06 12:43 UTC: Trainer rerun aborted on EPL season 19793 at page 201 (429). Need to add per-page throttle / Retry-After enforcement or resume-from-cache to avoid re-fetching when rate-limited.
 - 2026-03-06 13:13 UTC: Updated sportmonks.py to add per-page sleep + retry env flags (`SPORTMONKS_PAGE_SLEEP_SECONDS`, `SPORTMONKS_PAGE_RETRIES`, `SPORTMONKS_PAGE_RETRY_SLEEP`) so we back off before hitting 429 again.
+- 2026-03-06 15:31 UTC: Killing the 1.5s/page training run after confirming it would take ~10m per 400-page season; next launch will drop to 0.15s/page while keeping higher retries/backoff.
+- 2026-03-06 16:06 UTC: Completed retrain with 0.15s SportMonks page sleeps (no 429s). Exported new models under cloudrun-predictor/model with Over25 threshold 0.45 and BTTS 0.49.
