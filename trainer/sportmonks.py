@@ -3,8 +3,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Iterable, List, Dict, Any, Optional
+import json
+import os
+from pathlib import Path
 import time
 import requests
+
+CACHE_DIR = Path(__file__).resolve().parent / ".cache" / "schedules"
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
+PAGE_SLEEP_SECONDS = float(os.environ.get("SPORTMONKS_PAGE_SLEEP_SECONDS", "0.5"))
+PAGE_RETRY_LIMIT = int(os.environ.get("SPORTMONKS_PAGE_RETRIES", "3"))
+PAGE_RETRY_SLEEP = float(os.environ.get("SPORTMONKS_PAGE_RETRY_SLEEP", "5"))
 
 
 @dataclass
@@ -86,7 +95,14 @@ def seasons_for_league(client: SMClient, league_id: int) -> List[Dict[str, Any]]
     league = j.get("data", {})
     return league.get("seasons", []) or []
 
-def fixtures_by_season(client: SMClient, season_id: int, include: str | None = None) -> List[Dict[str, Any]]:
+
+def fixtures_by_season(
+    client: SMClient,
+    season_id: int,
+    include: str | None = None,
+    max_pages: Optional[int] = None,
+    use_cache: bool = True,
+) -> List[Dict[str, Any]]:
     """
     SportMonks v3: there is no /fixtures/season/{season_id}.
     Correct flow:
@@ -94,6 +110,19 @@ def fixtures_by_season(client: SMClient, season_id: int, include: str | None = N
       2) GET /fixtures/multi/{ids...}        -> fetch full fixture objects (50 ids max)
     """
     fixture_ids: List[int] = []
+    cache_path = CACHE_DIR / f"season_{season_id}_fixtures.json"
+    cache_hit = False
+
+    if use_cache and cache_path.exists():
+        try:
+            with cache_path.open() as fh:
+                cached = json.load(fh)
+            if isinstance(cached, list):
+                fixture_ids = [int(x) for x in cached]
+                cache_hit = True
+        except Exception:
+            fixture_ids = []
+            cache_hit = False
 
     def walk(obj: Any):
         if isinstance(obj, dict):
@@ -108,26 +137,61 @@ def fixtures_by_season(client: SMClient, season_id: int, include: str | None = N
             for x in obj:
                 walk(x)
 
-    # 1) schedule pages
-    page = 1
-    has_more = True
+    # 1) schedule pages (skipped when cache already satisfied)
+    if not cache_hit:
+        page = 1
+        has_more = True
+        cap = max_pages if max_pages is not None else int(os.environ.get("SPORTMONKS_MAX_SCHEDULE_PAGES", "400"))
 
-    while has_more:
-        schedule_url = (
-            f"{client.base_url}/schedules/seasons/{season_id}"
-            f"?api_token={client.token}&page={page}"
-        )
-        schedule = client.get_json(schedule_url)
+        while has_more:
+            if cap and page > cap:
+                print(f"[sportmonks] cap {cap} reached for season {season_id}; stopping pagination early")
+                break
 
-        walk(schedule.get("data", schedule))
+            schedule_url = (
+                f"{client.base_url}/schedules/seasons/{season_id}"
+                f"?api_token={client.token}&page={page}"
+            )
 
-        pagination = schedule.get("pagination") or (schedule.get("meta") or {}).get("pagination") or {}
-        page_count = len(schedule.get("data") or []) if isinstance(schedule.get("data"), list) else 1
-        has_more = _pagination_has_more(pagination, page, page_count)
-        page += 1
+            retries = 0
+            while True:
+                try:
+                    schedule = client.get_json(schedule_url)
+                    break
+                except RuntimeError as err:
+                    retries += 1
+                    if retries >= max(1, PAGE_RETRY_LIMIT):
+                        raise
+                    sleep_for = PAGE_RETRY_SLEEP * retries
+                    print(
+                        f"[sportmonks] retrying season {season_id} page {page} after error: {err}. "
+                        f"Sleeping {sleep_for:.1f}s"
+                    )
+                    time.sleep(sleep_for)
 
-        if page_count == 0:
-            has_more = False
+            walk(schedule.get("data", schedule))
+
+            pagination = schedule.get("pagination") or (schedule.get("meta") or {}).get("pagination") or {}
+            page_count = len(schedule.get("data") or []) if isinstance(schedule.get("data"), list) else 1
+
+            if not pagination:
+                has_more = False
+            else:
+                has_more = _pagination_has_more(pagination, page, page_count)
+                page += 1
+
+            if page_count == 0:
+                has_more = False
+
+            if PAGE_SLEEP_SECONDS > 0:
+                time.sleep(PAGE_SLEEP_SECONDS)
+
+        if use_cache and fixture_ids:
+            try:
+                with cache_path.open("w") as fh:
+                    json.dump(sorted(set(fixture_ids)), fh)
+            except Exception:
+                pass
 
     fixture_ids = sorted(set(fixture_ids))
     if not fixture_ids:
