@@ -338,6 +338,50 @@ def build_dataset(fixtures_raw: List[Dict[str, Any]], league_ids: List[int]) -> 
         home_form10 = build_team_form(home_last10, home_id, n_label=10)
         away_form10 = build_team_form(away_last10, away_id, n_label=10)
 
+        # rest days (days since each team's last completed fixture)
+        def _rest_days(last_matches: List[Dict[str, Any]]) -> float:
+            if not last_matches:
+                return float("nan")
+            prev = last_matches[0]
+            delta = kickoff_ts - int(prev["kickoffTs"])
+            if delta <= 0:
+                return float("nan")
+            return float(delta) / 86400.0
+
+        home_rest_days = _rest_days(home_last10)
+        away_rest_days = _rest_days(away_last10)
+
+        # table positions from raw participants meta (if provided)
+        fx_current = fx_by_id.get(fixture_id) or {}
+        participants_raw = fx_current.get("participants") or []
+        home_position = float("nan")
+        away_position = float("nan")
+        for p in participants_raw:
+            meta = p.get("meta") or {}
+            loc = meta.get("location")
+            pos = meta.get("position")
+            if pos is None:
+                continue
+            try:
+                pos_val = float(pos)
+            except Exception:
+                continue
+            if loc == "home":
+                home_position = pos_val
+            elif loc == "away":
+                away_position = pos_val
+
+        derived_position_gap = (
+            home_position - away_position
+            if not np.isnan(home_position) and not np.isnan(away_position)
+            else float("nan")
+        )
+        derived_rest_gap = (
+            home_rest_days - away_rest_days
+            if not np.isnan(home_rest_days) and not np.isnan(away_rest_days)
+            else float("nan")
+        )
+
         # xG needs raw fixtures for those match ids
         home_last5_fx = [fx_by_id.get(int(m["fixtureId"])) for m in home_last5]
         away_last5_fx = [fx_by_id.get(int(m["fixtureId"])) for m in away_last5]
@@ -412,6 +456,15 @@ def build_dataset(fixtures_raw: List[Dict[str, Any]], league_ids: List[int]) -> 
             else np.nan
         )
 
+        derived_btts_suppress5 = (
+            max(float(home_form5["csRate5"]), float(away_form5["csRate5"]))
+            + max(float(home_form5["ftsRate5"]), float(away_form5["ftsRate5"]))
+        )
+        derived_btts_suppress10 = (
+            max(float(home_form10["csRate10"]), float(away_form10["csRate10"]))
+            + max(float(home_form10["ftsRate10"]), float(away_form10["ftsRate10"]))
+        )
+
         # derived gaps (keep your older gaps too)
         derived_pointsGap5 = float(home_form5["pointsAvg5"] - away_form5["pointsAvg5"])
         derived_goalForGap5 = float(home_form5["goalsForAvg5"] - away_form5["goalsForAvg5"])
@@ -422,6 +475,13 @@ def build_dataset(fixtures_raw: List[Dict[str, Any]], league_ids: List[int]) -> 
         derived_goalsAgainstGapW5 = float(home_form5["goalsAgainstWAvg5"] - away_form5["goalsAgainstWAvg5"])
 
         feat: Dict[str, Any] = {
+            # table context + rest
+            "home_position": home_position,
+            "away_position": away_position,
+            "derived_positionGap": derived_position_gap,
+            "home_restDays": home_rest_days,
+            "away_restDays": away_rest_days,
+            "derived_restGap": derived_rest_gap,
             # form5 unweighted
             "home_form5_matches": float(home_form5["matches"]),
             "home_form5_pointsAvg5": float(home_form5["pointsAvg5"]),
@@ -529,6 +589,10 @@ def build_dataset(fixtures_raw: List[Dict[str, Any]], league_ids: List[int]) -> 
             "derived_expectedGoalsAsymW5": derived_expectedGoalsAsymW5,
             "derived_expectedGoalsTotalW10": derived_expectedGoalsTotalW10,
             "derived_expectedGoalsAsymW10": derived_expectedGoalsAsymW10,
+
+            # derived suppression metrics (mirror predictor helpers)
+            "derived_bttsSuppress5": derived_btts_suppress5,
+            "derived_bttsSuppress10": derived_btts_suppress10,
         }
 
         for lid in league_ids_sorted:
