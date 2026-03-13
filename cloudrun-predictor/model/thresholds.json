@@ -1,19 +1,19 @@
 {
   "modelVersion": "epl-v3",
-  "over25_threshold": 0.4500000000000001,
-  "btts_threshold": 0.49000000000000016,
+  "over25_threshold": 0.47000000000000014,
+  "btts_threshold": 0.5100000000000002,
   "calibration": {
     "over25": {
-      "balanced_accuracy": 0.5280134744988725,
-      "f1": 0.6653061224489796,
-      "accuracy": 0.542644666511736,
-      "objective": 0.5692012688839045
+      "balanced_accuracy": 0.559566200816638,
+      "f1": 0.6239040147669589,
+      "accuracy": 0.5664893617021277,
+      "objective": 0.5788675450017342
     },
     "btts": {
-      "balanced_accuracy": 0.5031195305909165,
-      "f1": 0.6963550404148239,
-      "accuracy": 0.5372995584475947,
-      "objective": 0.5610901835380887
+      "balanced_accuracy": 0.5170964897779248,
+      "f1": 0.7025454545454546,
+      "accuracy": 0.5648936170212766,
+      "objective": 0.5727311792081837
     }
   }
 }
