@@ -7,9 +7,29 @@
 
 # TASK_0002 — Model improvement scratchpad
 
-_Last updated: 2026-03-06 16:06 UTC_
+_Last updated: 2026-03-12 10:06 UTC_
 
-## Latest evaluation sample (fixtures_archive, archived 2026-03-04)
+## Latest evaluation sample (fixtures_archive, archived 2026-03-11)
+
+| Fixture ID | Match | Actual result | Pred picks | Correct? |
+| --- | --- | --- | --- | --- |
+| 19432179 | Birmingham City 1-0 QPR | Result H / BTTS N / Over N | Result H / BTTS Y / Over Y | ✅❌❌ |
+| 19432182 | Norwich City 2-1 Sheffield United | Result H / BTTS Y / Over Y | Result H / BTTS Y / Over Y | ✅✅✅ |
+| 19432187 | Coventry City 3-0 Preston | Result H / BTTS N / Over Y | Result H / BTTS Y / Over Y | ✅❌✅ |
+| 19432188 | Middlesbrough 0-1 Charlton | Result A / BTTS N / Over N | Result H / BTTS Y / Over Y | ❌❌❌ |
+| 19432189 | Oxford United 1-0 Blackburn | Result H / BTTS N / Over N | Result H / BTTS Y / Over N | ✅❌✅ |
+
+Accuracy over the five fixtures: **Result 4/5, Over2.5 3/5, BTTS 1/5.** Model is still over-committing to BTTS=Y even in low-total matches, suggesting the classification threshold or input features remain misaligned.
+
+### Fixture research (2026-03-11 sample)
+
+- All five fixtures were in the Championship with heavy home favourites (home implied win probabilities 56–73%). Away sides sat 12th-23rd in the table and produced a combined one goal, yet BTTS was predicted "Y" across the board.
+- Middlesbrough (2nd) vs Charlton (18th) finished 0-1 because Boro generated 0 goals on the night; without rest/position suppression features, the BTTS headroom stayed too high despite Charlton's low scoring trend.
+- Birmingham vs QPR and Oxford vs Blackburn both closed 1-0 with moneyline odds implying <35% away win probability, reinforcing that the classifier should lean toward BTTS="N" when market totals skew under 2.25 and one side struggles for goals.
+- Coventry vs Preston hit over 2.5 solely via the favourite; Preston never threatened. Model needs a way to down-weight BTTS when the underdog attack quality is weak, even if the favourite is prolific.
+
+
+## Evaluation sample (fixtures_archive, archived 2026-03-04)
 
 | Fixture ID | Match | Actual result | Pred picks | Correct? |
 | --- | --- | --- | --- | --- |
