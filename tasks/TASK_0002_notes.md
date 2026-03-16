@@ -1,3 +1,10 @@
+## 2026-03-16 weekly refresh
+- Log: `logs/lightgbm/run_2026-03-16T081022Z.log` (12,295 fixtures fetched; 67.1% include xG)
+- Dataset: 9,544 training rows, 120 features (36 xG/tempo, 84 form/other); mean xG NaN rate 19.3% vs ~0 for non-xG.
+- RESULT: multi_logloss 1.0186, accuracy 0.486 (best_iteration 62).
+- OVER25: logloss 0.6843 @ iter 26; calibrated threshold 0.48 (bal_acc 0.560, F1 0.635, acc 0.572). Form-only diagnostic degraded slightly (logloss 0.6865).
+- BTTS: logloss 0.6845 @ iter 5 with prob range 0.48–0.60; calibrated threshold 0.52 (bal_acc 0.517, F1 0.695, acc 0.566). Confirms need for TASK_0007 gating/loosening.
+
 # TASK_0002 — Model improvement scratchpad
 
 _Last updated: 2026-03-06 16:06 UTC_
