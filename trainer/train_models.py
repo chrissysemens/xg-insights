@@ -50,6 +50,9 @@ RUN_OVER25_XG_PRESENT_ONLY = os.environ.get("RUN_OVER25_XG_PRESENT_ONLY", "0").s
 # Optional: loosen binary hyperparams when models look flat
 LOOSEN_BINARY_PARAMS = os.environ.get("LOOSEN_BINARY_PARAMS", "0").strip() == "1"
 
+# Optional: require xG sample depth before BTTS training
+BTTS_MIN_XG_SAMPLE = int(os.environ.get("BTTS_MIN_XG_SAMPLE", "0"))
+
 # SportMonks fetch config
 SEASONS_N_DEFAULT = 4
 
@@ -259,6 +262,41 @@ def main():
     yo_train, yo_val = y_over25[idx_train], y_over25[idx_val]
     yb_train, yb_val = y_btts[idx_train], y_btts[idx_val]
 
+    btts_mask = np.ones(len(df), dtype=bool)
+    if BTTS_MIN_XG_SAMPLE > 0:
+        required = {"home_xg5_sampleSize", "away_xg5_sampleSize"}
+        if required.issubset(df.columns):
+            mask_series = (
+                (df["home_xg5_sampleSize"].fillna(0) >= BTTS_MIN_XG_SAMPLE)
+                & (df["away_xg5_sampleSize"].fillna(0) >= BTTS_MIN_XG_SAMPLE)
+            )
+            kept = int(mask_series.sum())
+            pct = float(mask_series.mean() * 100.0)
+            print(
+                f"BTTS filter applied (min xG sample={BTTS_MIN_XG_SAMPLE}): "
+                f"kept {kept}/{len(df)} rows ({pct:.1f}%)."
+            )
+            if kept < 500:
+                print(
+                    "WARNING: BTTS_MIN_XG_SAMPLE filter left fewer than 500 rows; results may be noisy."
+                )
+            btts_mask = mask_series.values
+        else:
+            print(
+                "BTTS_MIN_XG_SAMPLE set but xG sample columns missing; skipping BTTS filter."
+            )
+
+    idx_train_btts = idx_train[btts_mask[idx_train]] if len(idx_train) else idx_train
+    idx_val_btts = idx_val[btts_mask[idx_val]] if len(idx_val) else idx_val
+    if BTTS_MIN_XG_SAMPLE > 0:
+        if len(idx_train_btts) == 0 or len(idx_val_btts) == 0:
+            print("WARNING: BTTS filter removed all rows; reverting to unfiltered set.")
+            idx_train_btts, idx_val_btts = idx_train, idx_val
+    if len(idx_train_btts) < 100 or len(idx_val_btts) < 50:
+        if BTTS_MIN_XG_SAMPLE > 0:
+            print("WARNING: BTTS filter left too few rows; using unfiltered indices instead.")
+            idx_train_btts, idx_val_btts = idx_train, idx_val
+
     # Feature health
     hdr("FEATURE HEALTH (NaN + core sanity)")
     nan_rates = df[feature_names].isna().mean().sort_values(ascending=False)
@@ -398,17 +436,22 @@ def main():
 
     # Baseline binaries (FULL features)
     m_over25 = train_binary_custom("OVER25", X_train_all, X_val_all, yo_train, yo_val, feature_names)
-    m_btts = train_binary_custom("BTTS", X_train_all, X_val_all, yb_train, yb_val, feature_names)
+
+    X_train_btts = df.loc[idx_train_btts, feature_names].values.astype(np.float32)
+    X_val_btts = df.loc[idx_val_btts, feature_names].values.astype(np.float32)
+    yb_train_filtered = y_btts[idx_train_btts]
+    yb_val_filtered = y_btts[idx_val_btts]
+    m_btts = train_binary_custom("BTTS", X_train_btts, X_val_btts, yb_train_filtered, yb_val_filtered, feature_names)
 
     hdr("CALIBRATE BINARY THRESHOLDS (VALIDATION)")
     over25_val_prob = m_over25.predict(X_val_all)
-    btts_val_prob = m_btts.predict(X_val_all)
+    btts_val_prob = m_btts.predict(X_val_btts)
 
     over25_threshold, over25_metrics = calibrate_binary_threshold(
         yo_val, over25_val_prob, "OVER25"
     )
     btts_threshold, btts_metrics = calibrate_binary_threshold(
-        yb_val, btts_val_prob, "BTTS"
+        yb_val_filtered, btts_val_prob, "BTTS"
     )
 
     # Diagnostics: BTTS form-only
