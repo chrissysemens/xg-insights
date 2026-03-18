@@ -517,6 +517,7 @@ def main():
         "modelVersion": MODEL_VERSION,
         "over25_threshold": over25_threshold,
         "btts_threshold": btts_threshold,
+        "btts_min_xg_sample": BTTS_MIN_XG_SAMPLE,
         "calibration": {
             "over25": over25_metrics,
             "btts": btts_metrics,
